@@ -1,0 +1,111 @@
+@import url("https://cdn.jsdelivr.net/npm/vazirmatn@33.003/misc/Farsi-Digits/Vazirmatn-FD-font-face.css");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-vazir: "Vazirmatn", "Vazirmatn FD", Tahoma, system-ui, sans-serif;
+    --font-inter: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+    --background: 0 0% 100%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 243 75% 96%;
+    --accent-foreground: 243 75% 40%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 243 75% 59%;
+    --radius: 0.75rem;
+
+    --risk-safe: 142 71% 45%;
+    --risk-medium: 48 96% 53%;
+    --risk-high: 25 95% 53%;
+    --risk-critical: 0 84% 60%;
+  }
+
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 96%;
+    --card: 222 44% 10%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 44% 9%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 243 75% 66%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 33% 15%;
+    --muted-foreground: 215 20% 65%;
+    --accent: 243 50% 22%;
+    --accent-foreground: 243 90% 85%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217 33% 20%;
+    --input: 217 33% 22%;
+    --ring: 243 75% 66%;
+
+    --risk-safe: 142 69% 48%;
+    --risk-medium: 45 93% 55%;
+    --risk-high: 25 95% 58%;
+    --risk-critical: 0 84% 64%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* RTL-aware scrollbars + selection */
+  ::selection {
+    @apply bg-primary/25;
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply border border-white/10 bg-card/70 backdrop-blur-xl;
+  }
+  .grid-fade {
+    -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 60%, transparent 100%);
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+  }
+  .text-gradient {
+    @apply bg-gradient-to-br from-primary via-indigo-400 to-fuchsia-400 bg-clip-text text-transparent;
+  }
+}
+
+/* Ambient mesh background used on shells */
+.mesh-bg {
+  background-image:
+    radial-gradient(at 12% 18%, hsl(243 75% 59% / 0.14) 0px, transparent 45%),
+    radial-gradient(at 85% 8%, hsl(280 75% 60% / 0.1) 0px, transparent 45%),
+    radial-gradient(at 75% 85%, hsl(190 80% 50% / 0.08) 0px, transparent 45%);
+}
