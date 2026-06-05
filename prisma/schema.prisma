@@ -1,0 +1,319 @@
+// Peymanet — Prisma schema
+//
+// Dev/sandbox: SQLite (zero infra). For PRODUCTION switch the provider below to
+// "postgresql" and point DATABASE_URL at Postgres — no model changes required:
+//   • enums are modeled as String (TS unions + Zod enforce the values)
+//   • JSON payloads are stored as String columns ("...Json" suffix) and
+//     (de)serialized in code via lib/db/json.ts — portable across both engines.
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ───────────────────────────── Tenancy & identity ─────────────────────────────
+
+model Organization {
+  id        String     @id @default(cuid())
+  name      String
+  slug      String     @unique
+  createdAt DateTime   @default(now())
+  users     User[]
+  contracts Contract[]
+}
+
+model User {
+  id        String          @id @default(cuid())
+  email     String          @unique
+  name      String?
+  role      String          @default("member") // owner | admin | member | viewer
+  avatarUrl String?
+  orgId     String?
+  org       Organization?   @relation(fields: [orgId], references: [id])
+  events    TimelineEvent[]
+  createdAt DateTime        @default(now())
+}
+
+// ───────────────────────────── Contracts & versions ───────────────────────────
+
+model Contract {
+  id           String   @id @default(cuid())
+  orgId        String
+  org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  title        String
+  type         String   // employment | sale | service | nda | lease | loan | partnership | other
+  jurisdiction String?
+  language     String   @default("fa")
+  status       String   @default("draft") // draft | review | negotiation | signed | archived
+
+  headVersionId String?          @unique
+  headVersion   ContractVersion? @relation("HeadVersion", fields: [headVersionId], references: [id], onDelete: SetNull)
+
+  versions           ContractVersion[]   @relation("ContractVersions")
+  branches           Branch[]
+  events             TimelineEvent[]
+  analysisRuns       AnalysisRun[]
+  negotiationReports NegotiationReport[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+}
+
+model ContractVersion {
+  id            String  @id @default(cuid())
+  contractId    String
+  contract      Contract @relation("ContractVersions", fields: [contractId], references: [id], onDelete: Cascade)
+  versionNumber Int
+
+  // DAG: every version points at its parent (enables branching).
+  parentId String?
+  parent   ContractVersion?  @relation("VersionTree", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  children ContractVersion[] @relation("VersionTree")
+
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+
+  contentJson String // ProseMirror document (JSON text)
+  contentText String // canonical plain text -> stable clause offsets + AI input
+  contentHash String // cache / dedupe key
+
+  authorId String?
+  source   String  @default("human") // human | ai | system
+  message  String? // commit message / "why"
+
+  clauses        Clause[]
+  headOfContract Contract? @relation("HeadVersion")
+
+  createdAt DateTime @default(now())
+
+  @@unique([contractId, versionNumber])
+  @@index([contractId])
+  @@index([branchId])
+}
+
+model Branch {
+  id            String            @id @default(cuid())
+  contractId    String
+  contract      Contract          @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  name          String
+  status        String            @default("open") // open | merged | abandoned
+  baseVersionId String? // common ancestor at branch creation
+  headVersionId String? // current tip
+  color         String? // lane color in the graph
+  createdById   String?
+  createdAt     DateTime          @default(now())
+  versions      ContractVersion[]
+
+  @@unique([contractId, name])
+  @@index([contractId])
+}
+
+model Clause {
+  id          String @id @default(cuid())
+  versionId   String
+  version     ContractVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  index       Int
+  title       String?
+  type        String? // termination | payment | liability | ip | privacy | confidentiality | jurisdiction | ...
+  text        String
+  startOffset Int
+  endOffset   Int
+
+  riskAssessments  RiskAssessment[]
+  negotiationItems NegotiationItem[]
+
+  @@index([versionId])
+}
+
+// ───────────────────────────── Risk analysis (Feature 1) ──────────────────────
+
+model AnalysisRun {
+  id          String    @id @default(cuid())
+  contractId  String
+  contract    Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionId   String
+  status      String    @default("queued") // queued | running | completed | failed
+  model       String
+  overallRisk Int? // 0-100
+  summaryJson String? // DocSummary (JSON text)
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  assessments      RiskAssessment[]
+  missingClauses   MissingClause[]
+  complianceIssues ComplianceIssue[]
+  recommendations  Recommendation[]
+
+  @@index([contractId])
+}
+
+model RiskAssessment {
+  id                String   @id @default(cuid())
+  runId             String
+  run               AnalysisRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  clauseId          String
+  clause            Clause   @relation(fields: [clauseId], references: [id], onDelete: Cascade)
+  riskScore         Int // 0-100
+  severity          String // safe | medium | high | critical
+  confidence        Float // 0-1
+  categoriesJson    String // RiskCategory[] (JSON text)
+  citation          String? // exact phrase driving the risk
+  explanation       String
+  reasoning         String
+  suggestedFix      String?
+  alternativeClause String?
+  createdAt         DateTime @default(now())
+
+  @@index([runId])
+  @@index([clauseId])
+}
+
+model MissingClause {
+  id            String  @id @default(cuid())
+  runId         String
+  run           AnalysisRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  type          String
+  importance    String // low | medium | high | critical
+  rationale     String
+  suggestedText String?
+}
+
+model ComplianceIssue {
+  id          String  @id @default(cuid())
+  runId       String
+  run         AnalysisRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  framework   String // GDPR | local-labor-law | AML | ...
+  severity    String // low | medium | high | critical
+  description String
+  remediation String?
+}
+
+model Recommendation {
+  id          String @id @default(cuid())
+  runId       String
+  run         AnalysisRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  priority    String // low | medium | high
+  title       String
+  description String
+}
+
+// ───────────────────────────── Timeline (Feature 2) ───────────────────────────
+
+model TimelineEvent {
+  id         String   @id @default(cuid())
+  contractId String
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionId  String?
+  branchId   String?
+  type       String // ai_added_clause | user_deleted_text | ai_rewrote_section | user_approved | contract_signed | risk_scan_completed | branch_created | merged | restored | negotiation_accepted | fix_applied | created
+  source     String // human | ai | system
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  summary    String
+  why        String?
+  diffJson   String? // structured diff preview (JSON text)
+  metadataJson String? // arbitrary metadata (JSON text)
+  createdAt  DateTime @default(now())
+
+  @@index([contractId, createdAt])
+}
+
+// ───────────────────────────── Negotiation (Feature 3) ────────────────────────
+
+model NegotiationReport {
+  id                     String   @id @default(cuid())
+  contractId             String
+  contract               Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  versionId              String
+  perspective            String // employee | employer | buyer | seller | contractor | client | landlord | tenant
+  counterparty           String?
+  opportunityScore       Int // 0-100
+  riskReductionPotential Int // projected points removable if all accepted
+  model                  String
+  status                 String   @default("completed")
+  talkingPointsJson      String? // string[] (JSON text)
+  createdAt              DateTime @default(now())
+
+  items     NegotiationItem[]
+  checklist ChecklistItem[]
+  sessions  NegotiationSession[]
+
+  @@index([contractId])
+}
+
+model NegotiationItem {
+  id                      String   @id @default(cuid())
+  reportId                String
+  report                  NegotiationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  clauseId                String?
+  clause                  Clause?  @relation(fields: [clauseId], references: [id], onDelete: SetNull)
+  title                   String
+  currentRisk             Int
+  projectedRisk           Int // risk after suggested change
+  oneSided                Boolean  @default(false)
+  unfair                  Boolean  @default(false)
+  exploitable             Boolean  @default(false)
+  suggestedChange         String
+  strategy                String
+  expectedCounterArgument String
+  suggestedResponse       String
+  winProbability          Float // 0-1
+  difficulty              String // easy | moderate | hard
+  businessImpact          String // low | medium | high
+  legalImpact             String // low | medium | high
+  accepted                Boolean  @default(false)
+  createdAt               DateTime @default(now())
+
+  @@index([reportId])
+}
+
+model ChecklistItem {
+  id       String  @id @default(cuid())
+  reportId String
+  report   NegotiationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  label    String
+  done     Boolean @default(false)
+  priority Int     @default(0)
+}
+
+model NegotiationSession {
+  id           String   @id @default(cuid())
+  reportId     String
+  report       NegotiationReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  messagesJson String   @default("[]") // chat transcript (JSON text)
+  createdAt    DateTime @default(now())
+}
+
+// ───────────────────────────── AI observability ───────────────────────────────
+
+model AiCall {
+  id               String   @id @default(cuid())
+  contractId       String?
+  task             String // segment | risk | docSummary | negotiation | wargame
+  model            String
+  promptTokens     Int      @default(0)
+  completionTokens Int      @default(0)
+  costUsd          Float    @default(0)
+  latencyMs        Int      @default(0)
+  ok               Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model AiCache {
+  id           String   @id @default(cuid())
+  key          String   @unique
+  task         String
+  model        String
+  responseJson String
+  createdAt    DateTime @default(now())
+}
