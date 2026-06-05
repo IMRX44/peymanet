@@ -6,7 +6,7 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "پیمان‌نت — Peymanet · LegalAI",
+  title: "پیمانت — Peymanet · LegalAI",
   description:
     "تحلیل هوشمند قرارداد: نقشه حرارتی ریسک، خط‌زمانی نسخه‌ها و دستیار مذاکره · AI Contract Risk Heatmap, Timeline & Negotiation Assistant",
 };

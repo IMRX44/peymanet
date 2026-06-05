@@ -100,7 +100,7 @@ async function main() {
   await prisma.organization.deleteMany();
 
   const org = await prisma.organization.create({
-    data: { name: "دفتر حقوقی پیمان‌نت", slug: "peymanet" },
+    data: { name: "دفتر حقوقی پیمانت", slug: "peymanet" },
   });
 
   const owner = await prisma.user.create({

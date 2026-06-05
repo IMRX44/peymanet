@@ -109,3 +109,45 @@
     radial-gradient(at 85% 8%, hsl(280 75% 60% / 0.1) 0px, transparent 45%),
     radial-gradient(at 75% 85%, hsl(190 80% 50% / 0.08) 0px, transparent 45%);
 }
+
+/* ───────── Markdown editor (CodeMirror) line-level change tracking ───────── */
+.cm-editor {
+  height: 100%;
+  background: transparent !important;
+  font-family: var(--font-vazir);
+  font-size: 13.5px;
+}
+.cm-editor .cm-scroller {
+  font-family: var(--font-vazir);
+  line-height: 1.9;
+  padding-block: 8px;
+}
+.cm-editor.cm-focused {
+  outline: none;
+}
+.cm-editor .cm-gutters {
+  background: transparent !important;
+  border-inline-end: 1px solid hsl(var(--border)) !important;
+  color: hsl(var(--muted-foreground) / 0.6);
+}
+.cm-editor .cm-activeLine,
+.cm-editor .cm-activeLineGutter {
+  background: hsl(var(--primary) / 0.06) !important;
+}
+
+.cm-line-added {
+  background: hsl(var(--risk-safe) / 0.13);
+  box-shadow: inset 3px 0 0 0 hsl(var(--risk-safe));
+}
+.cm-line-modified {
+  background: hsl(var(--risk-medium) / 0.13);
+  box-shadow: inset 3px 0 0 0 hsl(var(--risk-medium));
+}
+.cm-line-ai {
+  background: hsl(270 80% 60% / 0.16);
+  box-shadow: inset 3px 0 0 0 hsl(270 85% 65%);
+}
+.cm-line-removed-before {
+  box-shadow: inset 0 2px 0 0 hsl(var(--risk-critical));
+}
+

@@ -65,7 +65,9 @@ export const EVENT_TYPES = [
   "created",
   "ai_added_clause",
   "user_deleted_text",
+  "user_edited",
   "ai_rewrote_section",
+  "ai_suggestion_rejected",
   "user_approved",
   "contract_signed",
   "risk_scan_completed",
@@ -192,3 +194,38 @@ export const NegotiateRequest = z.object({
 export const WargameRequest = z.object({
   message: z.string().min(1),
 });
+
+// ───────────────────────────── Document AI Assistant (Editor) ────────────────
+
+/**
+ * One structured response from the document-aware legal assistant.
+ * `kind` selects which optional payload is populated:
+ *   answer  -> message (+ optional highlight phrase to locate in the doc)
+ *   edit    -> edit { find, replacement } (a proposed in-place rewrite)
+ *   insert  -> insert { afterHeading, clause } (a new clause to add)
+ *   review  -> findings[] (risk review)
+ */
+export const AssistantEdit = z.object({
+  find: z.string(),
+  replacement: z.string(),
+});
+export const AssistantInsert = z.object({
+  afterHeading: z.string().nullable(),
+  clause: z.string(),
+});
+export const AssistantFinding = z.object({
+  clause: z.string(),
+  risk: Bilingual,
+  remediation: Bilingual,
+});
+
+export const AssistantResponse = z.object({
+  kind: z.enum(["answer", "edit", "insert", "review"]),
+  message: Bilingual,
+  highlight: z.string().nullable(),
+  summary: Bilingual.nullable(),
+  edit: AssistantEdit.nullable(),
+  insert: AssistantInsert.nullable(),
+  findings: z.array(AssistantFinding).nullable(),
+});
+export type AssistantResponse = z.infer<typeof AssistantResponse>;

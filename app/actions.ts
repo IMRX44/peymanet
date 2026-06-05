@@ -5,12 +5,13 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db/prisma";
 import { getCurrentUser } from "@/lib/auth";
 import { recordEvent } from "@/lib/events/events";
-import { restoreVersion } from "@/lib/events/versions";
+import { restoreVersion, commitEdit } from "@/lib/events/versions";
 import { createBranch, mergeBranch } from "@/lib/events/branches";
 import { wordDiff } from "@/lib/diff/textDiff";
 import { scoreToSeverity } from "@/lib/risk/colors";
 import { aggregateOverall } from "@/lib/risk/aggregate";
-import { generateNegotiationReport, wargameReply } from "@/lib/ai/providers";
+import { generateNegotiationReport, wargameReply, assistantReply } from "@/lib/ai/providers";
+import { mockSegmentation } from "@/lib/ai/mock";
 import { fromJson } from "@/lib/db/json";
 import type {
   RiskCategory,
@@ -18,6 +19,8 @@ import type {
   Perspective,
   RiskAssessmentResult,
   ContractType,
+  AiSource,
+  EventType,
 } from "@/lib/ai/schemas";
 import { PERSPECTIVE_PAIRS } from "@/lib/constants";
 
@@ -257,6 +260,95 @@ export async function wargameAction(args: {
     contractType: (contract?.type as ContractType) ?? "other",
   });
   return { ok: true as const, reply };
+}
+
+// ───────────────────────────── Editor (document) actions ─────────────────────
+
+function buildContentJson(content: string): string {
+  return JSON.stringify({ markdown: content });
+}
+
+/** Re-segment a version's text into Clause rows (keeps the analysis view consistent). */
+async function segmentVersionClauses(versionId: string, contentText: string) {
+  const seg = mockSegmentation(contentText);
+  let cursor = 0;
+  for (const c of seg.clauses) {
+    const idx = contentText.indexOf(c.text, cursor);
+    const start = idx >= 0 ? idx : cursor;
+    const end = start + c.text.length;
+    cursor = end;
+    await prisma.clause.create({
+      data: { versionId, index: c.index, title: c.title ?? null, type: c.type ?? null, text: c.text, startOffset: start, endOffset: end },
+    });
+  }
+}
+
+/** Autosave: persist the working draft to the head version in place (no new version). */
+export async function autosaveDocumentAction(contractId: string, content: string) {
+  const contract = await prisma.contract.findUnique({ where: { id: contractId } });
+  if (!contract?.headVersionId) return { ok: false as const };
+  await prisma.contractVersion.update({
+    where: { id: contract.headVersionId },
+    data: { contentText: content, contentJson: buildContentJson(content) },
+  });
+  return { ok: true as const, savedAt: new Date().toISOString() };
+}
+
+/** Commit a new immutable version from the editor (manual save or accepted AI edit). */
+export async function commitDocumentAction(args: {
+  contractId: string;
+  content: string;
+  source: AiSource;
+  eventType: EventType;
+  summary: string;
+  why?: string;
+}) {
+  const user = await getCurrentUser();
+  const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+  if (!contract?.headVersionId) return { ok: false as const };
+  const version = await commitEdit({
+    contractId: args.contractId,
+    parentVersionId: contract.headVersionId,
+    newContentJson: buildContentJson(args.content),
+    newContentText: args.content,
+    eventType: args.eventType,
+    source: args.source,
+    summary: args.summary,
+    why: args.why ?? null,
+    authorId: user?.id,
+  });
+  await segmentVersionClauses(version.id, args.content);
+  revalidateContract(args.contractId);
+  return { ok: true as const, versionId: version.id };
+}
+
+/** Document-aware assistant turn (no mutation). */
+export async function assistantAction(args: { contractId: string; document: string; message: string }) {
+  const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+  const response = await assistantReply({
+    document: args.document,
+    message: args.message,
+    contractType: (contract?.type as ContractType) ?? "other",
+    jurisdiction: contract?.jurisdiction ?? null,
+    language: contract?.language ?? "fa",
+    contractId: args.contractId,
+  });
+  return { ok: true as const, response };
+}
+
+/** Audit: record that the user rejected an AI suggestion. */
+export async function logRejectionAction(contractId: string, summary: string) {
+  const user = await getCurrentUser();
+  await recordEvent({
+    contractId,
+    type: "ai_suggestion_rejected",
+    source: "human",
+    actorId: user?.id,
+    summary,
+    why: "کاربر پیشنهاد هوش مصنوعی را رد کرد.",
+  });
+  revalidateContract(contractId);
+  return { ok: true as const };
 }
 
 export async function setLocaleAction(locale: "fa" | "en") {

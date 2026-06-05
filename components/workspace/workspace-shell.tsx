@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Scale, ScanLine, Loader2, Eye, ChevronRight, ShieldAlert, GitBranch, Handshake } from "lucide-react";
+import { Scale, ScanLine, Loader2, Eye, ChevronRight, ShieldAlert, GitBranch, Handshake, PenLine } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -66,6 +66,12 @@ export function WorkspaceShell() {
           <Button size="sm" variant="outline" className="gap-1.5" onClick={runAnalysis} disabled={analyzing}>
             {analyzing ? <Loader2 className="size-3.5 animate-spin" /> : <ScanLine className="size-3.5" />}
             <span className="hidden sm:inline">{analyzing ? t("analyzing") : t("reanalyze")}</span>
+          </Button>
+          <Button asChild size="sm" className="gap-1.5">
+            <Link href={`/contracts/${data.contract.id}/edit`}>
+              <PenLine className="size-3.5" />
+              <span className="hidden sm:inline">{t("editMode")}</span>
+            </Link>
           </Button>
           <LocaleToggle />
           <ThemeToggle />

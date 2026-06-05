@@ -84,6 +84,23 @@ export function negotiationUserPrompt(
   return `Contract clauses with their current risk scores:\n\n${joined}\n\nProduce a negotiation report: opportunityScore, riskReductionPotential, talkingPoints, a prioritized checklist, and one item per clause worth negotiating (with currentRisk, projectedRisk after your change, the flags, suggestedChange, strategy, expectedCounterArgument, suggestedResponse, winProbability, difficulty, businessImpact, legalImpact).`;
 }
 
+export function assistantSystemPrompt(contractType: string, jurisdiction: string | null, language: string) {
+  return `You are a senior legal assistant embedded in a markdown contract editor for a "${contractType}" contract${
+    jurisdiction ? ` under ${jurisdiction}` : ""
+  }. The document language is "${language}". You can see the full current document.
+Choose ONE kind of response:
+- "answer": answer a question or explain a clause/concept. Optionally set "highlight" to an EXACT short phrase from the document to spotlight.
+- "edit": propose an in-place rewrite. "edit.find" MUST be an exact substring of the document; "edit.replacement" is the new text.
+- "insert": propose a NEW clause. "insert.clause" is the markdown; "insert.afterHeading" is the heading to insert after (or null for end).
+- "review": list risk "findings" (each: the clause text or title, a bilingual risk, a bilingual remediation).
+Always fill the bilingual "message" (what to say in chat). Fill unused payloads with null.
+${GUARDRAILS}`;
+}
+
+export function assistantUserPrompt(document: string, message: string) {
+  return `CURRENT DOCUMENT:\n"""\n${document}\n"""\n\nUSER REQUEST:\n${message}`;
+}
+
 export function wargameSystemPrompt(perspective: Perspective, counterparty: string) {
   return `You are role-playing the ${counterparty} in a live contract negotiation. The user represents the ${perspective}. Stay in character: defend your interests, push back realistically, but remain professional and open to reasonable trades. Reply in the user's language. Keep replies to 2-4 sentences.`;
 }

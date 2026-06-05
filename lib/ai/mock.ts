@@ -9,6 +9,7 @@ import type {
   SegmentationResult,
   Perspective,
   Bilingual,
+  AssistantResponse,
 } from "@/lib/ai/schemas";
 
 /**
@@ -363,6 +364,90 @@ export function mockNegotiationReport(
       priority: it.businessImpact === "high" ? 0 : i + 1,
     })),
     items,
+  };
+}
+
+/** Deterministic document-aware assistant reply (Q&A / edit / insert / review). */
+export function mockAssistant(document: string, message: string): AssistantResponse {
+  const lines = document.split("\n");
+  const findLine = (re: RegExp) => lines.find((l) => re.test(l)) ?? null;
+  const base: AssistantResponse = {
+    kind: "answer",
+    message: { fa: "", en: "" },
+    highlight: null,
+    summary: null,
+    edit: null,
+    insert: null,
+    findings: null,
+  };
+
+  // REVIEW
+  if (/review|بررسی|ریسک|\brisk\b/i.test(message)) {
+    const findings: NonNullable<AssistantResponse["findings"]> = [];
+    const term = findLine(/فسخ|terminat/i);
+    if (term)
+      findings.push({
+        clause: term.trim(),
+        risk: { fa: "حق فسخ یک‌طرفه به نفع کارفرما.", en: "One-sided termination right favoring the employer." },
+        remediation: { fa: "دوره‌ی اطلاع متقابل ۳۰ روزه اضافه شود.", en: "Add a mutual 30-day notice period." },
+      });
+    const liab = findLine(/مسئولیت|liabilit|خسارت/i);
+    if (liab)
+      findings.push({
+        clause: liab.trim(),
+        risk: { fa: "مسئولیت بدون سقف.", en: "Uncapped liability." },
+        remediation: { fa: "سقف معادل مبلغ قرارداد تعیین شود.", en: "Cap liability at the contract value." },
+      });
+    return {
+      ...base,
+      kind: "review",
+      message: { fa: `بررسی انجام شد؛ ${findings.length || "۰"} ریسک کلیدی شناسایی شد.`, en: `Review complete; identified ${findings.length} key risks.` },
+      findings: findings.length
+        ? findings
+        : [{ clause: "—", risk: { fa: "ریسک قابل‌توجهی یافت نشد.", en: "No material risk found." }, remediation: { fa: "—", en: "—" } }],
+    };
+  }
+
+  // EDIT
+  if (/mutual|متقابل|دوطرفه|متوازن|make.*termination|termination.*mutual|فسخ/i.test(message) && /mutual|متقابل|دوطرفه|متوازن|change|make|تغییر|کن|اصلاح|fix/i.test(message)) {
+    const term = findLine(/فسخ|terminat/i);
+    if (term) {
+      const replacement =
+        "ماده ۴ - فسخ قرارداد\nهر یک از طرفین می‌تواند با اطلاع کتبی سی روزه قرارداد را خاتمه دهد. فسخ به دلیل تخلف، مستلزم اخطار کتبی و مهلت پانزده روزه برای رفع تخلف است.";
+      const findText = term.trim().startsWith("ماده ۴") ? `${term.trim()}\n${lines[lines.indexOf(term) + 1] ?? ""}`.trim() : term.trim();
+      return {
+        ...base,
+        kind: "edit",
+        message: { fa: "بند فسخ را متقارن می‌کنم (اطلاع ۳۰ روزه‌ی دوطرفه). diff را بررسی و تأیید کنید.", en: "I'll make the termination clause mutual (30-day notice both ways). Review the diff and approve." },
+        summary: { fa: "متقارن‌سازی بند فسخ", en: "Make termination mutual" },
+        edit: { find: findText, replacement },
+      };
+    }
+  }
+
+  // INSERT
+  if (/add|insert|اضافه|درج|بنویس|limitation of liability|سقف مسئولیت|محدودیت مسئولیت|force majeure|فورس ماژور/i.test(message)) {
+    const clause =
+      "\n\nماده جدید - محدودیت مسئولیت\nمسئولیت کل هر یک از طرفین تحت این قرارداد از مجموع مبالغ پرداخت‌شده فراتر نخواهد رفت و هیچ‌یک از طرفین مسئول خسارات غیرمستقیم یا تبعی نخواهد بود.";
+    return {
+      ...base,
+      kind: "insert",
+      message: { fa: "یک بند «محدودیت مسئولیت» پیش‌نویس کردم تا در انتهای سند درج شود. تأیید می‌کنید؟", en: "I drafted a 'Limitation of Liability' clause to insert at the end. Approve?" },
+      summary: { fa: "درج بند محدودیت مسئولیت", en: "Insert limitation of liability" },
+      insert: { afterHeading: null, clause },
+    };
+  }
+
+  // Q&A
+  const qMatch = message.match(/non[-\s]?solicitation|عدم جذب|محرمانه|confidential|فسخ|terminat|پرداخت|payment|مسئولیت|liabilit|مالکیت فکری|\bip\b/i);
+  const hit = qMatch ? findLine(new RegExp(qMatch[0], "i")) : null;
+  return {
+    ...base,
+    kind: "answer",
+    message: hit
+      ? { fa: "بله، بندی مرتبط در سند یافت و برجسته شد.", en: "Yes — I found a related provision in the document and highlighted it." }
+      : { fa: "موردی صریح در این باره در سند پیدا نکردم؛ احتمالاً این بند جا افتاده است.", en: "I couldn't find an explicit provision on that; it may be a missing clause." },
+    highlight: hit ? hit.trim().slice(0, 50) : null,
   };
 }
 

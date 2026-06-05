@@ -1,4 +1,4 @@
-# Peymanet (پیمان‌نت) — Product & Engineering Design
+# Peymanet (پیمانت) — Product & Engineering Design
 ### AI Contract Risk Heatmap · Contract Timeline · AI Negotiation Assistant
 
 > سند دوزبانه · Bilingual document (فارسی / English). اصطلاحات فنی، نام فیلدها و کد به انگلیسی هستند.
@@ -11,7 +11,7 @@ This document covers the complete design of three flagship LegalAI features and 
 
 ## 1. Complete Product Design · طراحی محصول
 
-**فارسی:** پیمان‌نت یک «فضای کاری هوش قراردادی» است. کاربر قرارداد را باز می‌کند و در یک محیط سه‌ستونه کار می‌کند: ناوبری بندها (راست در RTL)، بوم سند با نقشه‌ی حرارتی ریسک (مرکز)، و ریل زمینه‌ای (چپ) که بین سه تب جابه‌جا می‌شود: داشبورد ریسک، خط‌زمانی، و مرکز مذاکره. نوآوری اصلی این است که سه قابلیت **یک ستون فقرات داده‌ی مشترک** دارند: نقشه‌ی ریسک ارزیابی‌های هر بند را تولید می‌کند، دستیار مذاکره از همان ارزیابی‌ها استراتژی می‌سازد، و هر تغییر (اعمال اصلاح، پذیرش پیشنهاد، ویرایش) یک رویداد در خط‌زمانی ثبت می‌کند — پس خط‌زمانی هم‌زمان لاگ حسابرسی است.
+**فارسی:** پیمانت یک «فضای کاری هوش قراردادی» است. کاربر قرارداد را باز می‌کند و در یک محیط سه‌ستونه کار می‌کند: ناوبری بندها (راست در RTL)، بوم سند با نقشه‌ی حرارتی ریسک (مرکز)، و ریل زمینه‌ای (چپ) که بین سه تب جابه‌جا می‌شود: داشبورد ریسک، خط‌زمانی، و مرکز مذاکره. نوآوری اصلی این است که سه قابلیت **یک ستون فقرات داده‌ی مشترک** دارند: نقشه‌ی ریسک ارزیابی‌های هر بند را تولید می‌کند، دستیار مذاکره از همان ارزیابی‌ها استراتژی می‌سازد، و هر تغییر (اعمال اصلاح، پذیرش پیشنهاد، ویرایش) یک رویداد در خط‌زمانی ثبت می‌کند — پس خط‌زمانی هم‌زمان لاگ حسابرسی است.
 
 **English:** Peymanet is a contract-intelligence workspace. The user opens a contract and works in a three-pane environment: clause navigation, a document canvas with a live risk heatmap, and a contextual rail that switches between Risk Dashboard, Timeline, and Negotiation Center. The core innovation is a **shared data spine**: the heatmap produces per-clause `RiskAssessment`s, the negotiation assistant *consumes* them to build strategy, and every mutation emits a `TimelineEvent` — so the Timeline is also the audit log. Most tools bolt these on separately; here they reinforce each other.
 
@@ -145,6 +145,26 @@ Designed (clear upgrade paths): SSO/SAML, RBAC enforcement, encryption at rest, 
 5. **What-if risk-reduction simulation** — instant, no extra AI call.
 6. **RTL / Persian-first + bilingual** — an underserved market, with English legal wording where it matters.
 7. **Explainability** — reasoning + clause citations build trust; deterministic mock makes the product evaluable and demoable offline.
+
+---
+
+## 13. AI Contract Editor (PRD: AI-Powered Contract Editor) · ادیتور قرارداد
+
+علاوه بر workspace تحلیل، یک **حالت ویرایش** کامل ساخته شده که PRD کارفرما («AI-Powered Contract Editor») را پوشش می‌دهد. مسیر: `/contracts/[id]/edit` — دو ستونه: ادیتور Markdown (چپ/راست بسته به RTL) + دستیار حقوقی چت روی سند.
+
+A full **Edit mode** at `/contracts/[id]/edit` implements the employer's "AI-Powered Contract Editor" PRD, sharing the same version/event/AI spine.
+
+**Editor (left panel):** CodeMirror 6 markdown editor — line numbers, markdown syntax highlight, undo/redo, dirty-state indicator, debounced **autosave (2s)**, and **manual "Save version"** (immutable snapshot + timeline event). `components/editor/markdown-editor.tsx`.
+
+**Line-level change tracking:** per-line decorations computed by diffing against the committed baseline — **added (green) · modified (yellow) · removed (red marker) · AI-generated (purple)**. `components/editor/change-tracking.ts` (CM `StateField` + `StateEffect`).
+
+**AI Legal Assistant (right panel):** document-aware chat — **answer** (Q&A with in-doc highlight), **edit** (proposed rewrite shown as a redline **diff → accept/reject**), **insert** (new clause), **review** (risk findings). `components/editor/document-assistant.tsx`. Structured via the `AssistantResponse` Zod schema (`lib/ai/schemas.ts`), provider `assistantReply` (mock/OpenAI).
+
+**Editing modes:** **Suggest** (default — review the diff, accept/reject) and **Auto-apply** (AI edits applied directly, still versioned + undoable).
+
+**Auditability:** accepted edits → `ai_rewrote_section` / `ai_added_clause` versions; manual saves → `user_edited`; rejections → `ai_suggestion_rejected` — all immutable timeline events.
+
+**PRD compliance (✅ implemented):** markdown editor, line numbers, dirty state, line-level change tracking + colors, autosave, save→version, version history/compare/restore, undo/redo, diff visualization, document-aware chat (Q&A/explain/risk/suggest/insert), AI edits highlighted before acceptance, Suggest + Auto-apply modes, log of AI actions + accepted/rejected + approvals + immutable history. (Scale to 500+ pages = add virtualization; success-metrics = post-launch telemetry.)
 
 ---
 
