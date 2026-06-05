@@ -1,0 +1,15 @@
+# Normalize line endings on checkout so Docker/shell files are always LF,
+# even on Windows (prevents CRLF build/parse issues).
+* text=auto eol=lf
+
+Dockerfile text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Treat images and the lockfile as binary (no eol munging / diffs).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.webp binary
