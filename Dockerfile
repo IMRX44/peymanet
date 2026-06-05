@@ -10,22 +10,26 @@ WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1 \
     AI_MODE=mock \
+    AI_PROVIDER=openai \
     DATABASE_URL="file:./dev.db" \
     OPENAI_MODEL="gpt-4o" \
     OPENAI_MODEL_FAST="gpt-4o-mini" \
-    DEFAULT_LOCALE="fa"
+    DEFAULT_LOCALE="fa" \
+    npm_config_audit=false \
+    npm_config_fund=false \
+    NODE_OPTIONS=--max-old-space-size=3072
 
 # Prisma needs openssl present at build + runtime.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies (incl. dev deps — needed for build, prisma CLI and the seed).
-COPY package.json package-lock.json ./
-RUN npm ci
-
-# Copy source and build (prisma generate runs via the build script).
+# Copy the whole project (schema present for prisma generate).
 COPY . .
+# Install without running package scripts (avoids the heavy prisma engine
+# postinstall during the big install step), then generate the client explicitly.
+RUN npm ci --ignore-scripts
+RUN npx prisma generate
 RUN npm run build
 
 EXPOSE 3000

@@ -16,9 +16,16 @@ services:
       - "3000:3000"
     environment:
       AI_MODE: ${AI_MODE:-mock}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       OPENAI_MODEL_FAST: ${OPENAI_MODEL_FAST:-gpt-4o-mini}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_HEADERS: ${OPENAI_HEADERS:-}
+      AZURE_RESOURCE_NAME: ${AZURE_RESOURCE_NAME:-}
+      AZURE_API_KEY: ${AZURE_API_KEY:-}
+      AZURE_API_VERSION: ${AZURE_API_VERSION:-}
+      AZURE_BASE_URL: ${AZURE_BASE_URL:-}
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-fa}
     restart: unless-stopped
 

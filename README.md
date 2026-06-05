@@ -71,10 +71,31 @@ npm run dev                 # → http://localhost:3000
 | `AI_MODE` | Behavior |
 |-----------|----------|
 | `mock` (default) | Deterministic, contextual, bilingual results from `lib/ai/mock.ts`. No API key, no network. Ideal for demos, tests, offline. |
-| `openai` | Live OpenAI via the Vercel AI SDK (`generateObject`). Needs `OPENAI_API_KEY`. Models via `OPENAI_MODEL` / `OPENAI_MODEL_FAST`. |
+| `openai` | Live calls via the Vercel AI SDK. Works with **OpenAI**, **any OpenAI‑compatible endpoint** (reseller/proxy/gateway/OpenRouter/local LLM), or **Azure OpenAI**. |
 
-همان مسیر کد و همان schemaهای Zod (`lib/ai/schemas.ts`) هر دو حالت را پوشش می‌دهند — سوییچ فقط یک متغیر محیطی است.
-The same code path and Zod schemas serve both modes — switching is one env var.
+**🔌 Bring your own endpoint · هر AI که خریده‌ای:**
+
+```env
+# OpenAI (default)
+AI_MODE=openai
+OPENAI_API_KEY=sk-...
+
+# Any OpenAI-compatible provider (reseller / proxy / gateway / OpenRouter / local server)
+AI_MODE=openai
+OPENAI_API_KEY=your-key
+OPENAI_BASE_URL=https://your-provider.example/v1
+# OPENAI_HEADERS={"HTTP-Referer":"https://yourapp.com"}   # optional, if the gateway needs it
+
+# Azure OpenAI  (OPENAI_MODEL = your *deployment* name)
+AI_MODE=openai
+AI_PROVIDER=azure
+AZURE_RESOURCE_NAME=my-resource
+AZURE_API_KEY=...
+OPENAI_MODEL=my-gpt4o-deployment
+```
+
+با تنظیم `OPENAI_BASE_URL` می‌توانی AI خریداری‌شده از هر جای دیگر (هر endpoint سازگار با OpenAI) را استفاده کنی؛ برای Azure هم `AI_PROVIDER=azure` کافی است. همان مسیر کد و همان schemaهای Zod (`lib/ai/schemas.ts`) هر سه را پوشش می‌دهند — سوییچ فقط متغیر محیطی است.
+Set `OPENAI_BASE_URL` to use AI bought from anywhere (any OpenAI‑compatible endpoint); for Azure just set `AI_PROVIDER=azure`. One code path, switched by env.
 
 ---
 
