@@ -1,4 +1,4 @@
-# پیمان‌نت · Peymanet — LegalAI
+# پیمانت · Peymanet — LegalAI
 
 > هوش قراردادی: نقشه‌ی حرارتی ریسک، خط‌زمانی نسخه‌ها (Git-مانند) و دستیار مذاکره.
 > Contract intelligence: AI Risk Heatmap, Git-style Contract Timeline, and an AI Negotiation Assistant.
