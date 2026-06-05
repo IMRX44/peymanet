@@ -1,0 +1,35 @@
+# Peymanet — one command to run the whole app: `docker compose up --build`
+# Then open http://localhost:3000
+#
+# Default = MOCK AI (no API key needed) on SQLite.
+# To use OpenAI: create a .env next to this file with:
+#     AI_MODE=openai
+#     OPENAI_API_KEY=sk-...
+# To use PostgreSQL in production: switch the provider in prisma/schema.prisma to
+# "postgresql", point DATABASE_URL at the db service, and uncomment `db` below.
+
+services:
+  app:
+    build: .
+    container_name: peymanet
+    ports:
+      - "3000:3000"
+    environment:
+      AI_MODE: ${AI_MODE:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
+      OPENAI_MODEL_FAST: ${OPENAI_MODEL_FAST:-gpt-4o-mini}
+      DEFAULT_LOCALE: ${DEFAULT_LOCALE:-fa}
+    restart: unless-stopped
+
+  # ── PostgreSQL (optional, for production) ──
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: peymanet
+  #     POSTGRES_USER: peymanet
+  #     POSTGRES_PASSWORD: peymanet
+  #   ports: ["5432:5432"]
+  #   volumes: ["pgdata:/var/lib/postgresql/data"]
+# volumes:
+#   pgdata:

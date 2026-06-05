@@ -1,44 +1,86 @@
-# پیمانت · Peymanet — LegalAI
+<div align="center">
 
-> هوش قراردادی: نقشه‌ی حرارتی ریسک، خط‌زمانی نسخه‌ها (Git-مانند) و دستیار مذاکره.
-> Contract intelligence: AI Risk Heatmap, Git-style Contract Timeline, and an AI Negotiation Assistant.
+# پیمانت · Peymanet
 
-پلتفرمی با **Next.js 15** که قرارداد را بند به بند تحلیل می‌کند، ریسک را روی متن رنگ‌آمیزی می‌کند، تاریخچه‌ی تغییرات را مثل Git مدیریت می‌کند و مثل یک وکیل کنار شما مذاکره را راهبری می‌کند. کاملاً **دوزبانه (فارسی/انگلیسی، RTL-first)**.
+### AI‑Powered Contract Intelligence & Editor · هوش قراردادی مبتنی بر AI
 
-Built with **Next.js 15**. Runs fully **without an API key** (deterministic mock AI) and connects to **OpenAI** with one env var. See `DESIGN.md` for the full product & engineering design.
+نقشه‌ی حرارتی ریسک · خط‌زمانی Git‑مانند · دستیار مذاکره · ادیتور هوشمند قرارداد
+**Risk Heatmap · Git‑style Timeline · Negotiation Assistant · AI Contract Editor**
+
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs)
+![React](https://img.shields.io/badge/React-19-149ECA?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
+![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma)
+![OpenAI](https://img.shields.io/badge/AI-OpenAI%20%7C%20mock-412991?logo=openai)
+![Tailwind](https://img.shields.io/badge/Tailwind-3-38BDF8?logo=tailwindcss)
+![RTL](https://img.shields.io/badge/RTL-first-22c55e)
+
+![Peymanet — Risk Heatmap](docs/screenshots/02-risk-heatmap.png)
+
+</div>
 
 ---
 
-## Quick start · شروع سریع
+## ✨ معرفی · Overview
+
+**فارسی:** پیمانت یک پلتفرم LegalAI با **Next.js** است که قرارداد را بند به بند تحلیل می‌کند، ریسک را مستقیم روی متن رنگ‌آمیزی می‌کند، تاریخچه‌ی تغییرات را مثل Git مدیریت می‌کند، مثل یک وکیل کنار شما مذاکره را راهبری می‌کند، و یک **ادیتور Markdown با دستیار هوش مصنوعی** برای نگارش و اصلاح قرارداد دارد. کاملاً **دوزبانه (فارسی/انگلیسی، RTL‑first)**.
+
+**English:** Peymanet is a **Next.js** LegalAI platform that analyzes a contract clause‑by‑clause, paints risk directly onto the text, manages change history like Git, guides negotiation like a lawyer at your side, and ships a **markdown editor with an AI assistant** for drafting and revising. Fully **bilingual (Persian/English, RTL‑first)**.
+
+> 🟢 **Runs with NO API key.** Ships with a deterministic, contextual, bilingual **mock AI** so the entire product is demoable offline. Set `AI_MODE=openai` to use the real OpenAI engine — same code path.
+
+---
+
+## 🚀 شروع سریع · Quick Start
+
+### گزینه A — Docker (یک دستور) · Option A — Docker (one command)
+
+```bash
+docker compose up --build
+# → http://localhost:3000
+```
+
+این کانتینر به‌صورت خودکار schema را می‌سازد، یک قرارداد نمونه seed می‌کند و اپ را اجرا می‌کند (حالت mock، بدون نیاز به کلید).
+The container auto‑creates the schema, seeds a sample contract, and serves the app (mock mode, no key needed).
+
+برای OpenAI، یک فایل `.env` کنار `docker-compose.yml` بسازید · For OpenAI, create a `.env` next to `docker-compose.yml`:
+
+```env
+AI_MODE=openai
+OPENAI_API_KEY=sk-...
+```
+
+### گزینه B — اجرای محلی · Option B — Local
 
 ```bash
 npm install
-cp .env.example .env          # defaults are fine for a local demo
-npm run db:push               # create the SQLite dev database
-npm run db:seed               # seed a bilingual sample employment contract
-npm run dev                   # http://localhost:3000
+cp .env.example .env        # defaults are fine for a local demo
+npm run db:push             # create the SQLite dev database
+npm run db:seed             # seed a bilingual sample employment contract
+npm run dev                 # → http://localhost:3000
 ```
 
-Open `/` → **Open sample contract** → explore the three features (Risk / Timeline / Negotiation).
+سپس از صفحه‌ی اصلی روی **«باز کردن قرارداد نمونه»** بزنید. · Then click **“Open sample contract”** on the home page.
 
 ---
 
-## AI mode · حالت هوش مصنوعی
+## 🧠 حالت‌های هوش مصنوعی · AI Modes
 
-Controlled by `AI_MODE` in `.env`:
+`AI_MODE` را در `.env` تنظیم کنید · Controlled by `AI_MODE`:
 
 | `AI_MODE` | Behavior |
 |-----------|----------|
 | `mock` (default) | Deterministic, contextual, bilingual results from `lib/ai/mock.ts`. No API key, no network. Ideal for demos, tests, offline. |
-| `openai` | Live OpenAI via the Vercel AI SDK (`generateObject`). Requires `OPENAI_API_KEY`. Models: `OPENAI_MODEL` (deep), `OPENAI_MODEL_FAST` (segmentation). |
+| `openai` | Live OpenAI via the Vercel AI SDK (`generateObject`). Needs `OPENAI_API_KEY`. Models via `OPENAI_MODEL` / `OPENAI_MODEL_FAST`. |
 
-The same code path and the same Zod schemas (`lib/ai/schemas.ts`) serve both modes — switching is a one-line env change.
+همان مسیر کد و همان schemaهای Zod (`lib/ai/schemas.ts`) هر دو حالت را پوشش می‌دهند — سوییچ فقط یک متغیر محیطی است.
+The same code path and Zod schemas serve both modes — switching is one env var.
 
 ---
 
-## Switching to PostgreSQL (production) · سوییچ به Postgres
+## 🗄 سوییچ به PostgreSQL (production)
 
-The schema is Postgres-ready. In `prisma/schema.prisma`:
+schema برای Postgres آماده است. در `prisma/schema.prisma`:
 
 ```prisma
 datasource db {
@@ -47,41 +89,90 @@ datasource db {
 }
 ```
 
-Set `DATABASE_URL="postgresql://user:pass@host:5432/peymanet?schema=public"`, then `npm run db:push && npm run db:seed`. No model changes needed — enums are `String` (validated by Zod) and JSON lives in String columns (`lib/db/json.ts`).
+سپس `DATABASE_URL` را ست و `npm run db:push && npm run db:seed` را اجرا کنید. بدون تغییر مدل — enumها `String` (با اعتبارسنجی Zod) و JSON در ستون‌های String نگهداری می‌شوند.
+Set `DATABASE_URL`, then `db:push && db:seed`. No model changes — enums are `String` (Zod‑validated) and JSON lives in String columns.
 
 ---
 
-## Scripts · اسکریپت‌ها
+## 🧩 قابلیت‌ها · Features
+
+### ۱) نقشه‌ی حرارتی ریسک · AI Risk Heatmap
+هر بند روی متن قرارداد با امتیاز/شدت/دسته رنگ‌آمیزی می‌شود؛ با Hover یک کارت شناور (امتیاز، توضیح، استدلال حقوقی، اصلاح پیشنهادی، بند جایگزین) باز می‌شود؛ داشبورد سمت کنار شامل ریسک کلی، ۱۰ ریسک برتر، بندهای جاافتاده، انطباق و توصیه‌ها. اسکن **زنده و تدریجی** با SSE.
+
+![Floating risk card](docs/screenshots/03-risk-hovercard.png)
+
+### ۲) خط‌زمانی قرارداد · Contract Timeline (Git × Notion × Figma)
+هر تغییر یک رویداد می‌سازد؛ نمودار commit عمودی، diff خط‌قرمزی، مقایسه‌ی هر دو نسخه، شاخه‌بندی و **ادغام سه‌طرفه با تشخیص تعارض**، بازگردانی غیرمخرب و Time‑Scrubber.
+
+![Timeline](docs/screenshots/04-timeline.png)
+
+### ۳) دستیار مذاکره · AI Negotiation Assistant
+تحلیل از دید هر طرف (کارمند/کارفرما، خریدار/فروشنده، …)؛ برای هر بند: تغییر پیشنهادی، استراتژی، پاسخ احتمالی طرف مقابل و پاسخ شما + **احتمال موفقیت / سختی / اثر تجاری / اثر حقوقی**؛ امتیاز فرصت، چک‌لیست، نکات گفت‌وگو، **شبیه‌ساز what‑if کاهش ریسک** و **چت War‑game** که AI نقش طرف مقابل را بازی می‌کند.
+
+![Negotiation Center](docs/screenshots/05-negotiation.png)
+
+### ۴) ادیتور هوشمند قرارداد · AI Contract Editor
+ادیتور Markdown (CodeMirror) با شماره‌خط، **رهگیری تغییر خط‌به‌خط** (افزوده=سبز، اصلاح=زرد، حذف=قرمز، **ساخته‌ی AI=بنفش**)، autosave و Save‑version؛ کنارش یک **دستیار چت روی سند**: پرسش‌وپاسخ، پیشنهاد ویرایش (diff → accept/reject)، درج بند و بررسی ریسک — با دو حالت **Suggest / Auto‑apply**.
+
+![AI Editor — proposal diff](docs/screenshots/08-editor-proposal.png)
+![AI Editor — applied (purple = AI)](docs/screenshots/09-editor-applied.png)
+
+---
+
+## 🏗 معماری · Architecture
+
+اپلیکیشن Next.js (App Router) لایه‌بندی‌شده، با یک **ستون فقرات داده‌ی مشترک**: نقشه‌ی ریسک ارزیابی‌ها را می‌سازد، مذاکره از آن‌ها استفاده می‌کند، و هر تغییر یک `TimelineEvent` (لاگ حسابرسی تغییرناپذیر) ثبت می‌کند.
+
+- **`app/`** — صفحات (RSC)، Server Actions (`actions.ts`)، و مسیر SSE تحلیل
+- **`lib/ai/`** — providers · prompts · schemas (Zod) · mock · cache · models
+- **`lib/db/`** — Prisma · `queries.ts` (لودر workspace) · json helpers
+- **`lib/events/`** — event‑sourcing: versions · branches · 3‑way merge · `recordEvent`
+- **`lib/diff` · `lib/risk` · `lib/negotiation`** — موتور diff، تجمیع ریسک، شبیه‌ساز
+- **`components/`** — `workspace/ heatmap/ timeline/ negotiation/ editor/ shared/ ui/`
+
+جزئیات کامل (UX، schema، API، Prompt Engineering، انیمیشن‌ها، …) در **[`DESIGN.md`](DESIGN.md)** (دوزبانه، ۱۳ بخش).
+
+---
+
+## 📁 ساختار پروژه · Project Structure
+
+```
+app/                routes, server actions, SSE analyze route
+components/
+  workspace/  heatmap/  timeline/  negotiation/  editor/  shared/  ui/
+lib/
+  ai/   db/   events/   diff/   risk/   negotiation/   i18n/   constants
+prisma/             schema.prisma · seed.ts
+messages/           fa.json · en.json
+docs/screenshots/   UI screenshots used in this README
+Dockerfile · docker-compose.yml
+```
+
+---
+
+## 🧪 اسکریپت‌ها · Scripts
 
 | Script | Purpose |
 |--------|---------|
 | `npm run dev` | Dev server |
-| `npm run build` / `npm start` | Production build / serve |
+| `npm run build` / `start` | Production build / serve |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest unit tests (merge, diff, risk aggregation, simulator, mock schema validity) |
-| `npm run db:push` / `db:seed` / `db:reset` | Prisma schema push / seed / reset+seed |
+| `npm test` | Vitest (merge, diff, risk aggregation, simulator, mock schema) |
+| `npm run db:push` / `db:seed` / `db:reset` | Prisma push / seed / reset+seed |
 
 ---
 
-## Project structure · ساختار پروژه
+## 🖼 گالری · Gallery
 
-```
-app/                      routes (RSC), server actions (actions.ts), SSE analyze route
-components/
-  workspace/  heatmap/  timeline/  negotiation/  shared/  ui/
-lib/
-  ai/        providers · prompts · schemas (Zod) · mock · cache · models
-  db/        prisma · queries (workspace loader) · json helpers
-  events/    versions · branches · 3-way merge · recordEvent (event sourcing)
-  diff/  risk/  negotiation/  i18n/  constants
-prisma/      schema.prisma · seed.ts
-messages/    fa.json · en.json (UI chrome; legal content is bilingual in-DB)
-```
+| | |
+|---|---|
+| ![Landing](docs/screenshots/01-landing.png) | ![Risk heatmap](docs/screenshots/02-risk-heatmap.png) |
+| ![War‑game](docs/screenshots/06-wargame.png) | ![Editor](docs/screenshots/07-editor.png) |
+| ![English / LTR](docs/screenshots/10-english.png) | ![Timeline](docs/screenshots/04-timeline.png) |
 
 ---
 
-## Notes · نکات
+## ⚖️ سلب مسئولیت · Disclaimer
 
-- **Not legal advice.** Outputs are AI-generated guidance. · خروجی‌ها راهنمایی هوش مصنوعی هستند و مشاوره‌ی حقوقی نیستند.
-- Auth is a seeded demo user (`lib/auth.ts`); designed to drop in Auth.js/SSO later.
-- Locale toggles via a cookie (next-intl, no route prefixes); RTL/LTR handled by the root layout.
+خروجی‌های این محصول **راهنمایی مبتنی بر هوش مصنوعی** است و **مشاوره‌ی حقوقی** محسوب نمی‌شود.
+Outputs are **AI‑generated guidance** and **do not constitute legal advice**.
