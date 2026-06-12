@@ -13,7 +13,7 @@ import { RiskDashboard } from "@/components/heatmap/risk-dashboard";
 import { ChangesView } from "@/components/timeline/changes-view";
 import { NegotiationCenter } from "@/components/negotiation/negotiation-center";
 import { useWorkspace } from "@/components/workspace/workspace-store";
-import { CONTRACT_TYPE_LABELS } from "@/lib/constants";
+import { CONTRACT_TYPE_LABELS, statusLabel, jurisdictionLabel } from "@/lib/constants";
 import { pickBilingual } from "@/lib/i18n/localize";
 import { SEVERITY_HEX } from "@/lib/risk/colors";
 import { cn, toPersianDigits } from "@/lib/utils";
@@ -53,8 +53,8 @@ export function WorkspaceShell() {
             </Badge>
           </div>
           <p className="truncate text-[11px] text-muted-foreground">
-            {data.contract.jurisdiction} · {data.contract.status}
-            {data.version ? ` · v${toPersianDigits(data.version.versionNumber)}` : ""}
+            {jurisdictionLabel(data.contract.jurisdiction)} · {statusLabel(data.contract.status)}
+            {data.version ? ` · نسخهٔ ${toPersianDigits(data.version.versionNumber)}` : ""}
           </p>
         </div>
 

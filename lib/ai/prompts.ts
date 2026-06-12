@@ -59,7 +59,7 @@ ${GUARDRAILS}`;
 
 export function docSummaryUserPrompt(clauses: { title?: string | null; text: string }[]) {
   const joined = clauses.map((c, i) => `[#${i + 1}${c.title ? ` ${c.title}` : ""}] ${c.text}`).join("\n\n");
-  return `متن کامل قرارداد، بند به بند:\n\n${joined}\n\nشیء خلاصهٔ سند را تولید کن. همهٔ متن‌ها باید فارسی باشند.`;
+  return `متن کامل قرارداد، بند به بند:\n\n${joined}\n\nشیء خلاصهٔ سند را تولید کن. همهٔ متن‌ها — از جمله فیلد "type" بندهای جاافتاده و "framework" مسائل انطباق — باید به فارسی و خوانا باشند (نه کد انگلیسی مانند force_majeure).`;
 }
 
 export function segmentationSystemPrompt() {

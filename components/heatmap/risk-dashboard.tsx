@@ -87,7 +87,7 @@ export function RiskDashboard() {
             {analysis.missingClauses.map((m, i) => (
               <div key={i} className="rounded-lg border bg-muted/30 p-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-medium">{m.type}</span>
+                  <span className="text-xs font-semibold">{m.type}</span>
                   <SeverityBadge severity={m.importance} locale={locale} />
                 </div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">{m.rationale}</p>

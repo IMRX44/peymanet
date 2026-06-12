@@ -12,7 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createContractAction, deleteContractAction } from "@/app/actions";
-import { CONTRACT_TYPE_LABELS } from "@/lib/constants";
+import { CONTRACT_TYPE_LABELS, statusLabel } from "@/lib/constants";
 import { scoreToSeverity, SEVERITY_HEX } from "@/lib/risk/colors";
 import { toPersianDigits } from "@/lib/utils";
 import { CONTRACT_TYPES, type ContractType } from "@/lib/ai/schemas";
@@ -95,7 +95,7 @@ export function ContractsGrid({ contracts }: { contracts: ContractRow[] }) {
                       <h3 className="font-semibold leading-snug group-hover:text-primary">{c.title}</h3>
                       <div className="mt-1.5 flex items-center gap-2">
                         <Badge variant="muted">{CONTRACT_TYPE_LABELS[c.type as ContractType]?.fa ?? c.type}</Badge>
-                        <span className="text-xs text-muted-foreground">{c.status}</span>
+                        <span className="text-xs text-muted-foreground">{statusLabel(c.status)}</span>
                       </div>
                     </div>
                   </div>
