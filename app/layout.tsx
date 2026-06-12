@@ -13,6 +13,9 @@ const vazirmatn = Vazirmatn({
   display: "swap",
 });
 
+// All pages read from SQLite at request time; skip static prerender during `next build`.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "پیمانت — Peymanet · LegalAI",
   description:
