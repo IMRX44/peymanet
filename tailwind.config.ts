@@ -15,8 +15,8 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        sans: ["var(--font-vazir)", "var(--font-inter)", "system-ui", "sans-serif"],
-        latin: ["var(--font-inter)", "system-ui", "sans-serif"],
+        sans: ["var(--font-vazir)", "Tahoma", "system-ui", "sans-serif"],
+        latin: ["var(--font-vazir)", "Tahoma", "system-ui", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

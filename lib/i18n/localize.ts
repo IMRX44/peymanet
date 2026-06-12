@@ -23,6 +23,10 @@ export function pickBilingual(b: Bilingual | null | undefined, locale: string): 
   return locale === "en" ? b.en : b.fa;
 }
 
+export function isRtl(locale: string): boolean {
+  return locale === "fa";
+}
+
 /** Serialize a bilingual object for storage in a String column. */
 export function encodeBilingual(b: Bilingual | null | undefined): string | null {
   return b ? JSON.stringify(b) : null;

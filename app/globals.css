@@ -1,13 +1,10 @@
-@import url("https://cdn.jsdelivr.net/npm/vazirmatn@33.003/misc/Farsi-Digits/Vazirmatn-FD-font-face.css");
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --font-vazir: "Vazirmatn", "Vazirmatn FD", Tahoma, system-ui, sans-serif;
-    --font-inter: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-vazir: "Vazirmatn", Tahoma, system-ui, sans-serif;
 
     --background: 0 0% 100%;
     --foreground: 222 47% 11%;

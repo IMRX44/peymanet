@@ -5,9 +5,7 @@ export const locales = ["fa", "en"] as const;
 export type Locale = (typeof locales)[number];
 export const defaultLocale: Locale = (process.env.DEFAULT_LOCALE as Locale) || "fa";
 
-export function isRtl(locale: string) {
-  return locale === "fa";
-}
+export { isRtl } from "@/lib/i18n/localize";
 
 /**
  * next-intl "without i18n routing" setup: the active locale is read from a
