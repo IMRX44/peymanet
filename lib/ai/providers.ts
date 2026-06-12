@@ -9,6 +9,7 @@ import {
   NegotiationReportResult,
   AssistantResponse,
   AssistantResponseLlm,
+  PolicyComplianceResult,
   type Perspective,
 } from "@/lib/ai/schemas";
 import {
@@ -18,6 +19,7 @@ import {
   mockNegotiationReport,
   mockWargameReply,
   mockAssistant,
+  mockPolicyCompliance,
 } from "@/lib/ai/mock";
 import * as P from "@/lib/ai/prompts";
 import { PERSPECTIVE_LABELS, PERSPECTIVE_PAIRS } from "@/lib/constants";
@@ -196,22 +198,45 @@ export async function generateNegotiationReport(args: {
 export async function assistantReply(args: {
   document: string;
   message: string;
+  history?: { role: "user" | "assistant"; content: string }[];
   contractType: ContractType;
   jurisdiction: string | null;
   language: string;
   contractId?: string;
 }): Promise<AssistantResponse> {
+  // Keep the last 6 turns of context (Feature: chats remember up to 6 messages).
+  const history = (args.history ?? []).slice(-6);
   const raw = await runObject({
     task: "assistant",
     model: MODELS.deep,
     system: P.assistantSystemPrompt(args.contractType, args.jurisdiction, args.language),
-    prompt: P.assistantUserPrompt(args.document, args.message),
+    prompt: P.assistantUserPrompt(args.document, args.message, history),
     schema: AssistantResponseLlm,
     cacheInput: `${args.message}\u0000${args.document}`,
     mock: () => mockAssistant(args.document, args.message),
     contractId: args.contractId,
   });
   return AssistantResponse.parse(raw);
+}
+
+/** Check a contract against free-text organization policies (Feature: org policies). */
+export async function checkPolicyCompliance(args: {
+  document: string;
+  policies: string;
+  contractType: ContractType;
+  jurisdiction: string | null;
+  contractId?: string;
+}): Promise<PolicyComplianceResult> {
+  return runObject({
+    task: "policy",
+    model: MODELS.deep,
+    system: P.policySystemPrompt(args.contractType, args.jurisdiction),
+    prompt: P.policyUserPrompt(args.document, args.policies),
+    schema: PolicyComplianceResult,
+    cacheInput: `${args.policies} ${args.document}`,
+    mock: () => mockPolicyCompliance(args.document, args.policies),
+    contractId: args.contractId,
+  });
 }
 
 /** War-game counterparty turn. Returns the full reply text (route may chunk it). */

@@ -180,6 +180,27 @@ export const NegotiationReportResult = z.object({
 });
 export type NegotiationReportResult = z.infer<typeof NegotiationReportResult>;
 
+// ───────────────────────────── Org policy compliance (Feature) ───────────
+
+export const POLICY_STATUSES = ["compliant", "violation", "unclear"] as const;
+export const PolicyStatus = z.enum(POLICY_STATUSES);
+export type PolicyStatus = z.infer<typeof PolicyStatus>;
+
+export const PolicyFindingResult = z.object({
+  policy: z.string(),
+  status: PolicyStatus,
+  detail: Bilingual,
+  clause: z.string().nullable(),
+});
+export type PolicyFindingResult = z.infer<typeof PolicyFindingResult>;
+
+export const PolicyComplianceResult = z.object({
+  overall: z.enum(["compliant", "partial", "violation"]),
+  summary: Bilingual,
+  findings: z.array(PolicyFindingResult),
+});
+export type PolicyComplianceResult = z.infer<typeof PolicyComplianceResult>;
+
 // ───────────────────────────── API request bodies ───────────────────────
 
 export const AnalyzeRequest = z.object({

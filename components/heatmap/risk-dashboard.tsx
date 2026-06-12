@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScoreRing } from "@/components/shared/score-ring";
 import { SeverityBadge } from "@/components/shared/severity-badge";
+import { PolicyPanel } from "@/components/heatmap/policy-panel";
 import { useWorkspace } from "@/components/workspace/workspace-store";
 import { SEVERITY_HEX } from "@/lib/risk/colors";
 import { IMPACT_LABELS } from "@/lib/constants";
@@ -24,7 +25,12 @@ export function RiskDashboard() {
     .slice(0, 10);
 
   if (!analysis) {
-    return <p className="p-4 text-sm text-muted-foreground">{t("noRisksYet")}</p>;
+    return (
+      <div className="w-full space-y-4 p-4 text-start">
+        <p className="text-sm text-muted-foreground">{t("noRisksYet")}</p>
+        <PolicyPanel />
+      </div>
+    );
   }
 
   return (
@@ -81,7 +87,7 @@ export function RiskDashboard() {
             {analysis.missingClauses.map((m, i) => (
               <div key={i} className="rounded-lg border bg-muted/30 p-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-xs font-medium">{m.type}</span>
+                  <span className="text-xs font-semibold">{m.type}</span>
                   <SeverityBadge severity={m.importance} locale={locale} />
                 </div>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">{m.rationale}</p>
@@ -141,6 +147,9 @@ export function RiskDashboard() {
           </CardContent>
         </Card>
       )}
+
+      {/* Organization policy compliance */}
+      <PolicyPanel />
     </div>
   );
 }

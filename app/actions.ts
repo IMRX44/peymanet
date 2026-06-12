@@ -7,11 +7,12 @@ import { getCurrentUser } from "@/lib/auth";
 import { recordEvent } from "@/lib/events/events";
 import { restoreVersion, commitEdit } from "@/lib/events/versions";
 import { createBranch, mergeBranch } from "@/lib/events/branches";
-import { wordDiff } from "@/lib/diff/textDiff";
 import { scoreToSeverity } from "@/lib/risk/colors";
 import { aggregateOverall } from "@/lib/risk/aggregate";
-import { generateNegotiationReport, wargameReply, assistantReply } from "@/lib/ai/providers";
+import { generateNegotiationReport, wargameReply, assistantReply, checkPolicyCompliance } from "@/lib/ai/providers";
 import { mockSegmentation } from "@/lib/ai/mock";
+import { MODELS, estimateCost } from "@/lib/ai/models";
+import { createVersion } from "@/lib/events/versions";
 import { fromJson } from "@/lib/db/json";
 import type {
   RiskCategory,
@@ -22,6 +23,7 @@ import type {
   AiSource,
   EventType,
 } from "@/lib/ai/schemas";
+import { CONTRACT_TYPES } from "@/lib/ai/schemas";
 import { PERSPECTIVE_PAIRS } from "@/lib/constants";
 
 function actionError(err: unknown): string {
@@ -47,9 +49,13 @@ async function refreshRunOverall(runId: string) {
   await prisma.analysisRun.update({ where: { id: runId }, data: { overallRisk: overall } });
 }
 
-/** Apply the AI-suggested alternative clause; lower its risk; log a timeline event. */
+/**
+ * Apply the AI-suggested alternative clause WITHIN the risk-analysis tab only.
+ * This updates the clause's analysis text + lowers its assessed risk, but it does
+ * NOT touch the editable contract document or append a contract timeline event —
+ * the fix is a what-if applied to the risk view, not a change to the contract.
+ */
 export async function applyFixAction(clauseId: string) {
-  const user = await getCurrentUser();
   const clause = await prisma.clause.findUnique({ where: { id: clauseId }, include: { version: true } });
   if (!clause) return { ok: false as const, error: "clause not found" };
 
@@ -58,7 +64,6 @@ export async function applyFixAction(clauseId: string) {
     orderBy: { createdAt: "desc" },
   });
   const newText = assessment?.alternativeClause || clause.text;
-  const diff = wordDiff(clause.text, newText);
 
   await prisma.clause.update({ where: { id: clauseId }, data: { text: newText } });
 
@@ -70,25 +75,13 @@ export async function applyFixAction(clauseId: string) {
         riskScore: newScore,
         severity: scoreToSeverity(newScore),
         explanation: JSON.stringify({
-          fa: "این بند پس از اعمال اصلاح پیشنهادی، اکنون متوازن و کم‌ریسک است.",
-          en: "After applying the suggested fix, this clause is now balanced and low-risk.",
+          fa: "این بند پس از اعمال اصلاح پیشنهادی، اکنون متوازن و کم‌ریسک است. (این تغییر فقط در تب تحلیل ریسک اعمال شده و روی متن قرارداد اثری ندارد.)",
+          en: "این بند پس از اعمال اصلاح پیشنهادی، اکنون متوازن و کم‌ریسک است. (این تغییر فقط در تب تحلیل ریسک اعمال شده و روی متن قرارداد اثری ندارد.)",
         }),
       },
     });
     await refreshRunOverall(assessment.runId);
   }
-
-  await recordEvent({
-    contractId: clause.version.contractId,
-    type: "fix_applied",
-    source: "ai",
-    actorId: user?.id,
-    summary: `اعمال اصلاح روی «${clause.title ?? `بند ${clause.index + 1}`}»`,
-    why: "جایگزینی بند پرریسک با نسخه‌ی پیشنهادی هوش مصنوعی.",
-    versionId: clause.versionId,
-    diff,
-    metadata: { clauseId, clauseIndex: clause.index },
-  });
 
   revalidateContract(clause.version.contractId);
   return { ok: true as const };
@@ -342,21 +335,118 @@ export async function commitDocumentAction(args: {
   }
 }
 
-/** Document-aware assistant turn (no mutation). */
-export async function assistantAction(args: { contractId: string; document: string; message: string }) {
+/** Document-aware assistant turn (no mutation). Carries up to 6 messages of chat memory. */
+export async function assistantAction(args: {
+  contractId: string;
+  document: string;
+  message: string;
+  history?: { role: "user" | "assistant"; content: string }[];
+}) {
   try {
     const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const history = (args.history ?? []).slice(-6);
     const response = await assistantReply({
       document: args.document,
       message: args.message,
+      history,
       contractType: (contract?.type as ContractType) ?? "other",
       jurisdiction: contract?.jurisdiction ?? null,
       language: contract?.language ?? "fa",
       contractId: args.contractId,
     });
-    return { ok: true as const, response };
+
+    // Estimate this turn's cost so the UI can show per-chat spend.
+    const promptChars = args.document.length + args.message.length + history.reduce((s, m) => s + m.content.length, 0) + 600;
+    const completionChars = JSON.stringify(response).length;
+    const costUsd = estimateCost(MODELS.deep, Math.ceil(promptChars / 4), Math.ceil(completionChars / 4));
+
+    return { ok: true as const, response, costUsd };
   } catch (err) {
     console.error("[assistantAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
+}
+
+/** Check the current document against free-text organization policies (risk tab). */
+export async function checkPolicyComplianceAction(args: { contractId: string; document: string; policies: string }) {
+  try {
+    if (!args.policies.trim()) return { ok: false as const, error: "no policies provided" };
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const result = await checkPolicyCompliance({
+      document: args.document,
+      policies: args.policies,
+      contractType: (contract?.type as ContractType) ?? "other",
+      jurisdiction: contract?.jurisdiction ?? null,
+      contractId: args.contractId,
+    });
+    return { ok: true as const, result };
+  } catch (err) {
+    console.error("[checkPolicyComplianceAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
+}
+
+// ───────────────────────────── Contract management (create / delete) ─────────
+
+const STARTER_DOC =
+  "ماده ۱ - موضوع قرارداد\nموضوع این قرارداد عبارت است از …\n\nماده ۲ - مدت قرارداد\nمدت این قرارداد از تاریخ … تا تاریخ … است.\n\nماده ۳ - مبلغ و نحوهٔ پرداخت\nمبلغ کل قرارداد … ریال است که به‌صورت … پرداخت می‌شود.";
+
+/** Create a new contract with an initial version + segmented clauses + a "created" event. */
+export async function createContractAction(args: { title: string; type: string; content?: string }) {
+  try {
+    const title = args.title.trim();
+    if (!title) return { ok: false as const, error: "title required" };
+    const type = (CONTRACT_TYPES as readonly string[]).includes(args.type) ? args.type : "other";
+    const content = (args.content ?? "").trim() || STARTER_DOC;
+
+    const user = await getCurrentUser();
+    // Attach to the first org (single-tenant demo); create one if none exists.
+    const org =
+      (await prisma.organization.findFirst()) ??
+      (await prisma.organization.create({ data: { name: "سازمان پیمانت", slug: `org-${Date.now()}` } }));
+
+    const contract = await prisma.contract.create({
+      data: { orgId: org.id, title, type, jurisdiction: "Iran", language: "fa", status: "draft" },
+    });
+
+    const version = await createVersion({
+      contractId: contract.id,
+      contentJson: JSON.stringify({ markdown: content }),
+      contentText: content,
+      source: "human",
+      authorId: user?.id,
+      message: "پیش‌نویس اولیه قرارداد",
+    });
+    await segmentVersionClauses(version.id, content);
+
+    await recordEvent({
+      contractId: contract.id,
+      type: "created",
+      source: "human",
+      actorId: user?.id,
+      summary: "قرارداد جدید ایجاد شد",
+      why: "ایجاد قرارداد جدید توسط کاربر.",
+      versionId: version.id,
+    });
+
+    revalidatePath("/contracts");
+    return { ok: true as const, contractId: contract.id };
+  } catch (err) {
+    console.error("[createContractAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
+}
+
+/** Delete a contract and all of its related records. */
+export async function deleteContractAction(contractId: string) {
+  try {
+    // Break the Contract.headVersion self-relation before cascade delete.
+    await prisma.contract.update({ where: { id: contractId }, data: { headVersionId: null } });
+    await prisma.contract.delete({ where: { id: contractId } });
+    revalidatePath("/contracts");
+    return { ok: true as const };
+  } catch (err) {
+    console.error("[deleteContractAction]", err);
     return { ok: false as const, error: actionError(err) };
   }
 }

@@ -48,7 +48,21 @@ export function MarkdownEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlight]);
 
-  const extensions = useMemo(() => [markdown(), EditorView.lineWrapping, lineStatusField], []);
+  const extensions = useMemo(
+    () => [
+      markdown(),
+      EditorView.lineWrapping,
+      lineStatusField,
+      // Notion-like document surface: roomy, readable, no code-editor chrome.
+      EditorView.theme({
+        "&": { fontSize: "15px" },
+        ".cm-content": { padding: "20px 28px", lineHeight: "1.9", maxWidth: "820px", margin: "0 auto" },
+        ".cm-line": { padding: "2px 0" },
+        "&.cm-focused": { outline: "none" },
+      }),
+    ],
+    [],
+  );
 
   return (
     <CodeMirror
@@ -58,9 +72,9 @@ export function MarkdownEditor({
       extensions={extensions}
       height="100%"
       basicSetup={{
-        lineNumbers: true,
+        lineNumbers: false,
         foldGutter: false,
-        highlightActiveLine: true,
+        highlightActiveLine: false,
         autocompletion: false,
         bracketMatching: false,
         history: true,

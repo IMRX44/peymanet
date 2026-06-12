@@ -72,6 +72,26 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, Label> = {
   other: { fa: "سایر", en: "Other" },
 };
 
+/** Contract lifecycle status → Persian label. */
+export const STATUS_LABELS: Record<string, string> = {
+  draft: "پیش‌نویس",
+  review: "بازبینی",
+  negotiation: "در حال مذاکره",
+  signed: "امضاشده",
+  archived: "بایگانی‌شده",
+};
+
+export function statusLabel(status: string): string {
+  return STATUS_LABELS[status] ?? status;
+}
+
+/** Jurisdiction code/name → Persian label (falls back to the raw value). */
+export function jurisdictionLabel(j: string | null | undefined): string {
+  if (!j) return "";
+  const map: Record<string, string> = { Iran: "ایران", iran: "ایران", IR: "ایران" };
+  return map[j] ?? j;
+}
+
 export const EVENT_TYPE_LABELS: Record<EventType, Label> = {
   created: { fa: "ایجاد قرارداد", en: "Contract created" },
   ai_added_clause: { fa: "افزودن بند توسط AI", en: "AI added clause" },

@@ -2,14 +2,14 @@ import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { ShieldAlert, GitBranch, Handshake, ArrowLeft, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle, LocaleToggle } from "@/components/shared/toggles";
+import { ThemeToggle } from "@/components/shared/toggles";
 import { getContractIds } from "@/lib/db/queries";
 
 export default async function LandingPage() {
   const t = await getTranslations("landing");
   const tc = await getTranslations("common");
   const ids = await getContractIds();
-  const demoHref = ids.length ? `/contracts/${ids[0]}` : "/contracts";
+  const demoHref = ids.length ? `/contracts/${ids[0]}/edit` : "/contracts";
 
   const features = [
     { icon: ShieldAlert, title: t("feature1Title"), desc: t("feature1Desc"), color: "text-risk-high" },
@@ -27,7 +27,6 @@ export default async function LandingPage() {
           <span>{tc("appName")}</span>
         </div>
         <div className="flex items-center gap-1">
-          <LocaleToggle />
           <ThemeToggle />
         </div>
       </header>
