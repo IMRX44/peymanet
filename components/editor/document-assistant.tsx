@@ -54,14 +54,16 @@ export function DocumentAssistant({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, pending]);
 
-  const send = (text: string) => {
-    const q = text.trim();
-    if (!q || pending) return;
-    setMessages((m) => [...m, { role: "user", text: q }]);
-    setInput("");
-    start(async () => {
+  const runAssistant = async (q: string) => {
+    try {
       const res = await assistantAction({ contractId, document, message: q });
-      if (!res.ok) return;
+      if (!res.ok) {
+        toast.error(
+          res.error ??
+            (locale === "en" ? "Assistant request failed" : "درخواست دستیار ناموفق بود"),
+        );
+        return;
+      }
       const r = res.response;
       const pick = (b: { fa: string; en: string }) => (locale === "en" ? b.en : b.fa);
       const msg: Msg = { role: "assistant", text: pick(r.message), kind: r.kind, resolved: null };
@@ -70,37 +72,54 @@ export function DocumentAssistant({
       if (r.kind === "review" && r.findings) {
         msg.findings = r.findings.map((f) => ({ clause: f.clause, risk: pick(f.risk), remediation: pick(f.remediation) }));
       }
+      let autoApply: (() => void) | null = null;
       if (r.kind === "edit" && r.edit) {
         const proposal: Proposal = { type: "edit", find: r.edit.find, replacement: r.edit.replacement, summary: r.summary ? pick(r.summary) : msg.text };
         if (mode === "auto") {
-          onApplyEdit(proposal.find, proposal.replacement, proposal.summary);
+          autoApply = () => onApplyEdit(proposal.find, proposal.replacement, proposal.summary);
           msg.resolved = "accepted";
         } else msg.proposal = proposal;
       }
       if (r.kind === "insert" && r.insert) {
         const proposal: Proposal = { type: "insert", clause: r.insert.clause, summary: r.summary ? pick(r.summary) : msg.text };
         if (mode === "auto") {
-          onApplyInsert(proposal.clause, proposal.summary);
+          autoApply = () => onApplyInsert(proposal.clause, proposal.summary);
           msg.resolved = "accepted";
         } else msg.proposal = proposal;
       }
       setMessages((m) => [...m, msg]);
+      autoApply?.();
+    } catch {
+      toast.error(locale === "en" ? "Assistant request failed" : "درخواست دستیار ناموفق بود");
+    }
+  };
+
+  const send = (text: string) => {
+    const q = text.trim();
+    if (!q || pending) return;
+    setMessages((m) => [...m, { role: "user", text: q }]);
+    setInput("");
+    start(() => {
+      void runAssistant(q);
     });
   };
 
   const resolve = (idx: number, accept: boolean) => {
+    const msg = messages[idx];
+    if (!msg?.proposal) return;
+
+    if (accept) {
+      if (msg.proposal.type === "edit") onApplyEdit(msg.proposal.find, msg.proposal.replacement, msg.proposal.summary);
+      else onApplyInsert(msg.proposal.clause, msg.proposal.summary);
+    } else {
+      void logRejectionAction(contractId, msg.proposal.summary);
+      toast(locale === "en" ? "Suggestion rejected" : "پیشنهاد رد شد");
+    }
+
     setMessages((m) => {
       const next = [...m];
-      const msg = next[idx];
-      if (!msg.proposal) return m;
-      if (accept) {
-        if (msg.proposal.type === "edit") onApplyEdit(msg.proposal.find, msg.proposal.replacement, msg.proposal.summary);
-        else onApplyInsert(msg.proposal.clause, msg.proposal.summary);
-      } else {
-        void logRejectionAction(contractId, msg.proposal.summary);
-        toast(locale === "en" ? "Suggestion rejected" : "پیشنهاد رد شد");
-      }
-      next[idx] = { ...msg, resolved: accept ? "accepted" : "rejected" };
+      if (!next[idx]?.proposal) return m;
+      next[idx] = { ...next[idx], resolved: accept ? "accepted" : "rejected" };
       return next;
     });
   };
@@ -223,7 +242,11 @@ export function DocumentAssistant({
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send(input)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              send(input);
+            }}
             placeholder={t("assistantPlaceholder")}
           />
           <Button size="icon" onClick={() => send(input)} disabled={pending || !input.trim()}>

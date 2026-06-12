@@ -3,6 +3,7 @@
 import { useState, useTransition, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslations } from "next-intl";
+import { toast } from "sonner";
 import { Swords, Send, Loader2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -32,9 +33,16 @@ export function Wargame({ contractId, perspective, locale }: { contractId: strin
     const history = [...messages, { role: "user" as const, content: text }];
     setMessages(history);
     setInput("");
-    start(async () => {
-      const res = await wargameAction({ contractId, perspective, history });
-      if (res.ok) setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
+    start(() => {
+      void (async () => {
+        try {
+          const res = await wargameAction({ contractId, perspective, history });
+          if (res.ok) setMessages((m) => [...m, { role: "assistant", content: res.reply }]);
+          else toast.error(res.error ?? (locale === "en" ? "War-game request failed" : "درخواست جنگ‌افزار ناموفق بود"));
+        } catch {
+          toast.error(locale === "en" ? "War-game request failed" : "درخواست جنگ‌افزار ناموفق بود");
+        }
+      })();
     });
   };
 
@@ -86,10 +94,14 @@ export function Wargame({ contractId, perspective, locale }: { contractId: strin
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && send()}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              send();
+            }}
             placeholder={t("wargamePlaceholder")}
           />
-          <Button size="icon" onClick={send} disabled={pending || !input.trim()}>
+          <Button size="icon" onClick={() => send()} disabled={pending || !input.trim()}>
             <Send className="size-4 rtl:rotate-180" />
           </Button>
         </div>

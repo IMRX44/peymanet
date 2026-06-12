@@ -24,6 +24,11 @@ import type {
 } from "@/lib/ai/schemas";
 import { PERSPECTIVE_PAIRS } from "@/lib/constants";
 
+function actionError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return "unexpected server error";
+}
+
 function revalidateContract(id: string) {
   revalidatePath(`/contracts/${id}`);
 }
@@ -160,92 +165,97 @@ export async function acceptNegotiationItemAction(itemId: string) {
 }
 
 export async function generateNegotiationAction(contractId: string, perspective: Perspective) {
-  const contract = await prisma.contract.findUnique({ where: { id: contractId } });
-  if (!contract?.headVersionId) return { ok: false as const, error: "no head version" };
+  try {
+    const contract = await prisma.contract.findUnique({ where: { id: contractId } });
+    if (!contract?.headVersionId) return { ok: false as const, error: "no head version" };
 
-  const clauses = await prisma.clause.findMany({
-    where: { versionId: contract.headVersionId },
-    orderBy: { index: "asc" },
-  });
-  const run = await prisma.analysisRun.findFirst({
-    where: { contractId, status: "completed" },
-    orderBy: { createdAt: "desc" },
-  });
-  const assessmentRows = run ? await prisma.riskAssessment.findMany({ where: { runId: run.id } }) : [];
-  const byClause = new Map(assessmentRows.map((a) => [a.clauseId, a]));
+    const clauses = await prisma.clause.findMany({
+      where: { versionId: contract.headVersionId },
+      orderBy: { index: "asc" },
+    });
+    const run = await prisma.analysisRun.findFirst({
+      where: { contractId, status: "completed" },
+      orderBy: { createdAt: "desc" },
+    });
+    const assessmentRows = run ? await prisma.riskAssessment.findMany({ where: { runId: run.id } }) : [];
+    const byClause = new Map(assessmentRows.map((a) => [a.clauseId, a]));
 
-  const assessments: RiskAssessmentResult[] = clauses.map((c) => {
-    const a = byClause.get(c.id);
-    return {
-      riskScore: a?.riskScore ?? 30,
-      severity: (a?.severity as Severity) ?? "medium",
-      confidence: a?.confidence ?? 0.8,
-      categories: fromJson<RiskCategory[]>(a?.categoriesJson ?? "[]", ["legal"]),
-      citation: a?.citation ?? null,
-      explanation: fromJson(a?.explanation ?? "", { fa: "", en: "" }),
-      reasoning: fromJson(a?.reasoning ?? "", { fa: "", en: "" }),
-      suggestedFix: a?.suggestedFix ? fromJson(a.suggestedFix, { fa: "", en: "" }) : null,
-      alternativeClause: a?.alternativeClause ?? null,
-    };
-  });
+    const assessments: RiskAssessmentResult[] = clauses.map((c) => {
+      const a = byClause.get(c.id);
+      return {
+        riskScore: a?.riskScore ?? 30,
+        severity: (a?.severity as Severity) ?? "medium",
+        confidence: a?.confidence ?? 0.8,
+        categories: fromJson<RiskCategory[]>(a?.categoriesJson ?? "[]", ["legal"]),
+        citation: a?.citation ?? null,
+        explanation: fromJson(a?.explanation ?? "", { fa: "", en: "" }),
+        reasoning: fromJson(a?.reasoning ?? "", { fa: "", en: "" }),
+        suggestedFix: a?.suggestedFix ? fromJson(a.suggestedFix, { fa: "", en: "" }) : null,
+        alternativeClause: a?.alternativeClause ?? null,
+      };
+    });
 
-  const result = await generateNegotiationReport({
-    clauses: clauses.map((c) => ({ index: c.index, title: c.title, text: c.text })),
-    assessments,
-    perspective,
-    contractType: contract.type as ContractType,
-    jurisdiction: contract.jurisdiction,
-    contractId,
-  });
-
-  const pair = PERSPECTIVE_PAIRS[contract.type as ContractType];
-  const counterparty = pair ? (pair[0] === perspective ? pair[1] : pair[0]) : null;
-
-  // Replace any existing report for this perspective.
-  await prisma.negotiationReport.deleteMany({ where: { contractId, perspective } });
-  const report = await prisma.negotiationReport.create({
-    data: {
-      contractId,
-      versionId: contract.headVersionId,
+    const result = await generateNegotiationReport({
+      clauses: clauses.map((c) => ({ index: c.index, title: c.title, text: c.text })),
+      assessments,
       perspective,
-      counterparty,
-      opportunityScore: result.opportunityScore,
-      riskReductionPotential: result.riskReductionPotential,
-      model: run?.model ?? "mock",
-      talkingPointsJson: JSON.stringify(result.talkingPoints),
-    },
-  });
-  for (const it of result.items) {
-    const clause = clauses.find((c) => c.index === it.clauseIndex);
-    await prisma.negotiationItem.create({
+      contractType: contract.type as ContractType,
+      jurisdiction: contract.jurisdiction,
+      contractId,
+    });
+
+    const pair = PERSPECTIVE_PAIRS[contract.type as ContractType];
+    const counterparty = pair ? (pair[0] === perspective ? pair[1] : pair[0]) : null;
+
+    // Replace any existing report for this perspective.
+    await prisma.negotiationReport.deleteMany({ where: { contractId, perspective } });
+    const report = await prisma.negotiationReport.create({
       data: {
-        reportId: report.id,
-        clauseId: clause?.id ?? null,
-        title: JSON.stringify(it.title),
-        currentRisk: it.currentRisk,
-        projectedRisk: it.projectedRisk,
-        oneSided: it.oneSided,
-        unfair: it.unfair,
-        exploitable: it.exploitable,
-        suggestedChange: JSON.stringify(it.suggestedChange),
-        strategy: JSON.stringify(it.strategy),
-        expectedCounterArgument: JSON.stringify(it.expectedCounterArgument),
-        suggestedResponse: JSON.stringify(it.suggestedResponse),
-        winProbability: it.winProbability,
-        difficulty: it.difficulty,
-        businessImpact: it.businessImpact,
-        legalImpact: it.legalImpact,
+        contractId,
+        versionId: contract.headVersionId,
+        perspective,
+        counterparty,
+        opportunityScore: result.opportunityScore,
+        riskReductionPotential: result.riskReductionPotential,
+        model: run?.model ?? "mock",
+        talkingPointsJson: JSON.stringify(result.talkingPoints),
       },
     });
-  }
-  for (const ch of result.checklist) {
-    await prisma.checklistItem.create({
-      data: { reportId: report.id, label: JSON.stringify(ch.label), priority: ch.priority },
-    });
-  }
+    for (const it of result.items) {
+      const clause = clauses.find((c) => c.index === it.clauseIndex);
+      await prisma.negotiationItem.create({
+        data: {
+          reportId: report.id,
+          clauseId: clause?.id ?? null,
+          title: JSON.stringify(it.title),
+          currentRisk: it.currentRisk,
+          projectedRisk: it.projectedRisk,
+          oneSided: it.oneSided,
+          unfair: it.unfair,
+          exploitable: it.exploitable,
+          suggestedChange: JSON.stringify(it.suggestedChange),
+          strategy: JSON.stringify(it.strategy),
+          expectedCounterArgument: JSON.stringify(it.expectedCounterArgument),
+          suggestedResponse: JSON.stringify(it.suggestedResponse),
+          winProbability: it.winProbability,
+          difficulty: it.difficulty,
+          businessImpact: it.businessImpact,
+          legalImpact: it.legalImpact,
+        },
+      });
+    }
+    for (const ch of result.checklist) {
+      await prisma.checklistItem.create({
+        data: { reportId: report.id, label: JSON.stringify(ch.label), priority: ch.priority },
+      });
+    }
 
-  revalidateContract(contractId);
-  return { ok: true as const, reportId: report.id };
+    revalidateContract(contractId);
+    return { ok: true as const, reportId: report.id };
+  } catch (err) {
+    console.error("[generateNegotiationAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 export async function wargameAction(args: {
@@ -253,13 +263,18 @@ export async function wargameAction(args: {
   perspective: Perspective;
   history: { role: "user" | "assistant"; content: string }[];
 }) {
-  const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
-  const reply = await wargameReply({
-    history: args.history,
-    perspective: args.perspective,
-    contractType: (contract?.type as ContractType) ?? "other",
-  });
-  return { ok: true as const, reply };
+  try {
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const reply = await wargameReply({
+      history: args.history,
+      perspective: args.perspective,
+      contractType: (contract?.type as ContractType) ?? "other",
+    });
+    return { ok: true as const, reply };
+  } catch (err) {
+    console.error("[wargameAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 // ───────────────────────────── Editor (document) actions ─────────────────────
@@ -303,37 +318,47 @@ export async function commitDocumentAction(args: {
   summary: string;
   why?: string;
 }) {
-  const user = await getCurrentUser();
-  const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
-  if (!contract?.headVersionId) return { ok: false as const };
-  const version = await commitEdit({
-    contractId: args.contractId,
-    parentVersionId: contract.headVersionId,
-    newContentJson: buildContentJson(args.content),
-    newContentText: args.content,
-    eventType: args.eventType,
-    source: args.source,
-    summary: args.summary,
-    why: args.why ?? null,
-    authorId: user?.id,
-  });
-  await segmentVersionClauses(version.id, args.content);
-  revalidateContract(args.contractId);
-  return { ok: true as const, versionId: version.id };
+  try {
+    const user = await getCurrentUser();
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    if (!contract?.headVersionId) return { ok: false as const, error: "no head version" };
+    const version = await commitEdit({
+      contractId: args.contractId,
+      parentVersionId: contract.headVersionId,
+      newContentJson: buildContentJson(args.content),
+      newContentText: args.content,
+      eventType: args.eventType,
+      source: args.source,
+      summary: args.summary,
+      why: args.why ?? null,
+      authorId: user?.id,
+    });
+    await segmentVersionClauses(version.id, args.content);
+    revalidateContract(args.contractId);
+    return { ok: true as const, versionId: version.id };
+  } catch (err) {
+    console.error("[commitDocumentAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 /** Document-aware assistant turn (no mutation). */
 export async function assistantAction(args: { contractId: string; document: string; message: string }) {
-  const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
-  const response = await assistantReply({
-    document: args.document,
-    message: args.message,
-    contractType: (contract?.type as ContractType) ?? "other",
-    jurisdiction: contract?.jurisdiction ?? null,
-    language: contract?.language ?? "fa",
-    contractId: args.contractId,
-  });
-  return { ok: true as const, response };
+  try {
+    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const response = await assistantReply({
+      document: args.document,
+      message: args.message,
+      contractType: (contract?.type as ContractType) ?? "other",
+      jurisdiction: contract?.jurisdiction ?? null,
+      language: contract?.language ?? "fa",
+      contractId: args.contractId,
+    });
+    return { ok: true as const, response };
+  } catch (err) {
+    console.error("[assistantAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 /** Audit: record that the user rejected an AI suggestion. */
