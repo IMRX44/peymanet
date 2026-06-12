@@ -5,7 +5,7 @@ import { aggregateOverall, topRisks, severityCounts } from "@/lib/risk/aggregate
 import { simulateRiskReduction } from "@/lib/negotiation/simulate";
 import { scoreToSeverity } from "@/lib/risk/colors";
 import { mockRiskAssessment, mockSegmentation, mockNegotiationReport } from "@/lib/ai/mock";
-import { RiskAssessmentResult, NegotiationReportResult } from "@/lib/ai/schemas";
+import { RiskAssessmentResult, NegotiationReportResult, AssistantResponse, AssistantResponseLlm } from "@/lib/ai/schemas";
 
 describe("threeWayMerge", () => {
   it("fast-forwards when one side is unchanged", () => {
@@ -109,5 +109,30 @@ describe("mock AI engine produces schema-valid output", () => {
     const report = mockNegotiationReport(clauses, assessments, "employee");
     expect(() => NegotiationReportResult.parse(report)).not.toThrow();
     expect(report.items.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("AssistantResponse schema", () => {
+  const insertPayload = {
+    kind: "insert" as const,
+    message: { fa: "بند فورس ماژور به قرارداد اضافه شد.", en: "A force majeure clause has been added to the contract." },
+    highlight: "فورس ماژور",
+    insert: {
+      afterHeading: "ماده ۸ - حل اختلاف و صلاحیت قضایی",
+      clause: "ماده ۹ - فورس ماژور\nدر صورت بروز حوادث غیرمترقبه…",
+    },
+    summary: { fa: "بند فورس ماژور به قرارداد اضافه شد.", en: "A force majeure clause has been added to the contract." },
+  };
+
+  it("LLM schema accepts insert responses that omit unused edit/findings keys", () => {
+    expect(() => AssistantResponseLlm.parse(insertPayload)).not.toThrow();
+  });
+
+  it("normalizes omitted payloads to null", () => {
+    const parsed = AssistantResponse.parse(insertPayload);
+    expect(parsed.kind).toBe("insert");
+    expect(parsed.edit).toBeNull();
+    expect(parsed.findings).toBeNull();
+    expect(parsed.insert?.clause).toContain("فورس ماژور");
   });
 });

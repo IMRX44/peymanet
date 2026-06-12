@@ -219,13 +219,28 @@ export const AssistantFinding = z.object({
   remediation: Bilingual,
 });
 
-export const AssistantResponse = z.object({
+/**
+ * Loose schema for `generateObject` — models omit payload keys they don't use.
+ * The AI SDK validates raw JSON against this before Zod defaults would apply.
+ */
+export const AssistantResponseLlm = z.object({
   kind: z.enum(["answer", "edit", "insert", "review"]),
   message: Bilingual,
-  highlight: z.string().nullable(),
-  summary: Bilingual.nullable(),
-  edit: AssistantEdit.nullable(),
-  insert: AssistantInsert.nullable(),
-  findings: z.array(AssistantFinding).nullable(),
+  highlight: z.string().nullable().optional(),
+  summary: Bilingual.nullable().optional(),
+  edit: AssistantEdit.nullable().optional(),
+  insert: AssistantInsert.nullable().optional(),
+  findings: z.array(AssistantFinding).nullable().optional(),
 });
-export type AssistantResponse = z.infer<typeof AssistantResponse>;
+
+/** Normalized app shape — every payload slot is present (null when unused). */
+export const AssistantResponse = AssistantResponseLlm.transform((v) => ({
+  kind: v.kind,
+  message: v.message,
+  highlight: v.highlight ?? null,
+  summary: v.summary ?? null,
+  edit: v.edit ?? null,
+  insert: v.insert ?? null,
+  findings: v.findings ?? null,
+}));
+export type AssistantResponse = z.output<typeof AssistantResponse>;

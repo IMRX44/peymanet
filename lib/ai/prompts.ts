@@ -93,7 +93,7 @@ Choose ONE kind of response:
 - "edit": propose an in-place rewrite. "edit.find" MUST be an exact substring of the document; "edit.replacement" is the new text.
 - "insert": propose a NEW clause. "insert.clause" is the markdown; "insert.afterHeading" is the heading to insert after (or null for end).
 - "review": list risk "findings" (each: the clause text or title, a bilingual risk, a bilingual remediation).
-Always fill the bilingual "message" (what to say in chat). Fill unused payloads with null.
+Always fill the bilingual "message" (what to say in chat). Only include the payload for the chosen kind (edit / insert / findings); omit the others entirely.
 ${GUARDRAILS}`;
 }
 
