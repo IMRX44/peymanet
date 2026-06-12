@@ -43,13 +43,15 @@
   },
   "workspace": {
     "riskTab": "نقشه ریسک",
-    "timelineTab": "خط‌زمانی",
+    "timelineTab": "تغییرات",
     "negotiationTab": "مرکز مذاکره",
-    "reanalyze": "اسکن مجدد ریسک",
+    "reanalyze": "تحلیل مجدد ریسک",
     "analyzing": "در حال تحلیل…",
     "editMode": "ویرایش",
     "overallRisk": "ریسک کلی",
     "clausesCount": "تعداد بند",
+    "lastAnalyzed": "آخرین تحلیل",
+    "changesSince": "تغییر از آن زمان",
     "branch": "شاخه",
     "main": "اصلی"
   },

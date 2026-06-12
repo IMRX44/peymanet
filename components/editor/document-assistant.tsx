@@ -4,10 +4,23 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslations } from "next-intl";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Check, X, Wand2, Plus, ShieldAlert, MessageCircle } from "lucide-react";
+import {
+  Sparkles,
+  Send,
+  Loader2,
+  Check,
+  X,
+  Wand2,
+  Plus,
+  ShieldAlert,
+  MessageCircle,
+  MessagesSquare,
+  ChevronDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { DiffViewer } from "@/components/timeline/diff-viewer";
 import { assistantAction, logRejectionAction } from "@/app/actions";
 import { wordDiff } from "@/lib/diff/textDiff";
@@ -27,6 +40,14 @@ type Msg = {
   resolved?: "accepted" | "rejected" | null;
 };
 
+type Chat = { id: string; title: string; messages: Msg[]; costUsd: number };
+
+const newChat = (): Chat => ({ id: Math.random().toString(36).slice(2), title: "گفت‌وگوی جدید", messages: [], costUsd: 0 });
+
+function fmtCost(usd: number): string {
+  return `$${usd.toFixed(4)}`;
+}
+
 export function DocumentAssistant({
   contractId,
   locale,
@@ -45,23 +66,36 @@ export function DocumentAssistant({
   onHighlight: (phrase: string) => void;
 }) {
   const t = useTranslations("editor");
-  const [messages, setMessages] = useState<Msg[]>([]);
+  const [chats, setChats] = useState<Chat[]>([newChat()]);
+  const [activeId, setActiveId] = useState<string>(() => chats[0].id);
   const [input, setInput] = useState("");
   const [pending, start] = useTransition();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const active = chats.find((c) => c.id === activeId) ?? chats[0];
+  const messages = active.messages;
+
+  const patchActive = (fn: (c: Chat) => Chat) =>
+    setChats((all) => all.map((c) => (c.id === activeId ? fn(c) : c)));
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, pending]);
 
+  const startNewChat = () => {
+    const c = newChat();
+    setChats((all) => [...all, c]);
+    setActiveId(c.id);
+    setInput("");
+  };
+
   const runAssistant = async (q: string) => {
     try {
-      const res = await assistantAction({ contractId, document, message: q });
+      // Send up to the last 6 messages as conversation memory.
+      const history = active.messages.slice(-6).map((m) => ({ role: m.role, content: m.text }));
+      const res = await assistantAction({ contractId, document, message: q, history });
       if (!res.ok) {
-        toast.error(
-          res.error ??
-            (locale === "en" ? "Assistant request failed" : "درخواست دستیار ناموفق بود"),
-        );
+        toast.error(res.error ?? "درخواست دستیار ناموفق بود");
         return;
       }
       const r = res.response;
@@ -87,17 +121,21 @@ export function DocumentAssistant({
           msg.resolved = "accepted";
         } else msg.proposal = proposal;
       }
-      setMessages((m) => [...m, msg]);
+      patchActive((c) => ({ ...c, messages: [...c.messages, msg], costUsd: c.costUsd + (res.costUsd ?? 0) }));
       autoApply?.();
     } catch {
-      toast.error(locale === "en" ? "Assistant request failed" : "درخواست دستیار ناموفق بود");
+      toast.error("درخواست دستیار ناموفق بود");
     }
   };
 
   const send = (text: string) => {
     const q = text.trim();
     if (!q || pending) return;
-    setMessages((m) => [...m, { role: "user", text: q }]);
+    patchActive((c) => ({
+      ...c,
+      title: c.messages.length === 0 ? q.slice(0, 40) : c.title,
+      messages: [...c.messages, { role: "user", text: q }],
+    }));
     setInput("");
     start(() => {
       void runAssistant(q);
@@ -113,34 +151,63 @@ export function DocumentAssistant({
       else onApplyInsert(msg.proposal.clause, msg.proposal.summary);
     } else {
       void logRejectionAction(contractId, msg.proposal.summary);
-      toast(locale === "en" ? "Suggestion rejected" : "پیشنهاد رد شد");
+      toast("پیشنهاد رد شد");
     }
 
-    setMessages((m) => {
-      const next = [...m];
-      if (!next[idx]?.proposal) return m;
+    patchActive((c) => {
+      const next = [...c.messages];
+      if (!next[idx]?.proposal) return c;
       next[idx] = { ...next[idx], resolved: accept ? "accepted" : "rejected" };
-      return next;
+      return { ...c, messages: next };
     });
   };
 
   const suggestions = [
-    { icon: ShieldAlert, label: t("qReview"), q: locale === "en" ? "Review this agreement for legal risks." : "این قرارداد را از نظر ریسک‌های حقوقی بررسی کن." },
-    { icon: Wand2, label: t("qMutual"), q: locale === "en" ? "Make the termination clause mutual." : "بند فسخ را متقابل و متوازن کن." },
-    { icon: Plus, label: t("qLiability"), q: locale === "en" ? "Add a limitation of liability section." : "یک بند محدودیت مسئولیت اضافه کن." },
-    { icon: MessageCircle, label: t("qNonSolicit"), q: locale === "en" ? "Does this contract include a non-solicitation clause?" : "آیا این قرارداد بند عدم جذب دارد؟" },
+    { icon: ShieldAlert, label: t("qReview"), q: "این قرارداد را از نظر ریسک‌های حقوقی بر اساس قوانین جمهوری اسلامی ایران بررسی کن." },
+    { icon: Wand2, label: t("qMutual"), q: "بند فسخ را متقابل و متوازن کن." },
+    { icon: Plus, label: t("qLiability"), q: "یک بند محدودیت مسئولیت اضافه کن." },
+    { icon: MessageCircle, label: t("qNonSolicit"), q: "آیا این قرارداد بند عدم جذب دارد؟" },
   ];
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 border-b bg-card/50 px-4 py-3 backdrop-blur">
-        <span className="grid size-7 place-items-center rounded-lg bg-gradient-to-br from-primary to-fuchsia-500 text-primary-foreground">
+      {/* Assistant header + chat switcher */}
+      <div className="flex items-center gap-2 border-b bg-card/50 px-3 py-2.5 backdrop-blur">
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-primary to-fuchsia-500 text-primary-foreground">
           <Sparkles className="size-3.5" />
         </span>
-        <div className="leading-tight">
-          <p className="text-sm font-semibold">{t("assistantTitle")}</p>
-          <p className="text-[11px] text-muted-foreground">{t("assistantSubtitle")}</p>
+        <div className="min-w-0 flex-1 leading-tight">
+          <p className="truncate text-sm font-semibold">{t("assistantTitle")}</p>
+          <p className="truncate text-[11px] text-muted-foreground">
+            هزینهٔ این گفت‌وگو: {fmtCost(active.costUsd)}
+          </p>
         </div>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="ghost" className="h-8 gap-1 px-2">
+              <MessagesSquare className="size-3.5" />
+              <span className="text-xs">{chats.length > 1 ? `${chats.length}` : ""}</span>
+              <ChevronDown className="size-3" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            {chats.map((c) => (
+              <DropdownMenuItem
+                key={c.id}
+                onClick={() => setActiveId(c.id)}
+                className={cn("flex items-center justify-between gap-2", c.id === activeId && "bg-accent")}
+              >
+                <span className="line-clamp-1 flex-1 text-xs">{c.title}</span>
+                <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{fmtCost(c.costUsd)}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+
+        <Button size="icon" variant="ghost" className="size-8 shrink-0" onClick={startNewChat} title="گفت‌وگوی جدید">
+          <Plus className="size-4" />
+        </Button>
       </div>
 
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto scrollbar-thin p-4">

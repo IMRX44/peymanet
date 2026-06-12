@@ -6,23 +6,16 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { undo, redo } from "@codemirror/commands";
 import type { EditorView } from "@codemirror/view";
-import {
-  Scale,
-  Save,
-  Undo2,
-  Redo2,
-  Check,
-  Loader2,
-  BarChart3,
-  Wand2,
-  PenLine,
-} from "lucide-react";
+import { Scale, Save, Undo2, Redo2, Check, Loader2, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ThemeToggle, LocaleToggle } from "@/components/shared/toggles";
+import { ThemeToggle } from "@/components/shared/toggles";
+import { ContractTabBar } from "@/components/shared/contract-tabbar";
 import { MarkdownEditor } from "@/components/editor/markdown-editor";
 import { DocumentAssistant } from "@/components/editor/document-assistant";
+import { EditorToolbar } from "@/components/editor/editor-toolbar";
+import { LibraryDialog } from "@/components/editor/library-dialog";
+import { BlocksOutline } from "@/components/editor/blocks-outline";
 import { autosaveDocumentAction, commitDocumentAction } from "@/app/actions";
 import { cn, toPersianDigits } from "@/lib/utils";
 
@@ -57,6 +50,7 @@ export function EditorWorkspace({
   const [highlight, setHighlight] = useState<string | null>(null);
   const [mode, setMode] = useState<"suggest" | "auto">("suggest");
   const [saving, setSaving] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const viewRef = useRef<EditorView | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -84,19 +78,19 @@ export function EditorWorkspace({
       content,
       source: "human",
       eventType: "user_edited",
-      summary: locale === "en" ? "Saved a new document version" : "ذخیره‌ی نسخه‌ی جدید سند",
+      summary: "ذخیره‌ی نسخه‌ی جدید سند",
     });
     setSavedContent(content);
     setBaseline(content);
     setAiLines(new Set());
     setSaving(false);
-    toast.success(locale === "en" ? "Version saved" : "نسخه ذخیره شد");
-  }, [content, contractId, locale]);
+    toast.success("نسخه ذخیره شد");
+  }, [content, contractId]);
 
   const applyEdit = useCallback(
     (find: string, replacement: string, summary: string) => {
       if (!content.includes(find)) {
-        toast.error(locale === "en" ? "Target text not found" : "متن هدف در سند پیدا نشد");
+        toast.error("متن هدف در سند پیدا نشد");
         return;
       }
       const next = content.replace(find, replacement);
@@ -105,11 +99,11 @@ export function EditorWorkspace({
       setSavedContent(next);
       setBaseline(next);
       void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_rewrote_section", summary }).then((res) => {
-        if (!res.ok) toast.error(res.error ?? (locale === "en" ? "Could not save AI edit" : "ذخیره‌ی ویرایش هوش مصنوعی ناموفق بود"));
+        if (!res.ok) toast.error(res.error ?? "ذخیره‌ی ویرایش هوش مصنوعی ناموفق بود");
       });
-      toast.success(locale === "en" ? "AI edit applied" : "ویرایش هوش مصنوعی اعمال شد");
+      toast.success("ویرایش هوش مصنوعی اعمال شد");
     },
-    [content, contractId, locale],
+    [content, contractId],
   );
 
   const applyInsert = useCallback(
@@ -120,12 +114,32 @@ export function EditorWorkspace({
       setSavedContent(next);
       setBaseline(next);
       void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_added_clause", summary }).then((res) => {
-        if (!res.ok) toast.error(res.error ?? (locale === "en" ? "Could not save inserted clause" : "ذخیره‌ی بند جدید ناموفق بود"));
+        if (!res.ok) toast.error(res.error ?? "ذخیره‌ی بند جدید ناموفق بود");
       });
-      toast.success(locale === "en" ? "Clause inserted" : "بند جدید درج شد");
+      toast.success("بند جدید درج شد");
     },
-    [content, contractId, locale],
+    [content, contractId],
   );
+
+  // Library: insert a ready-made clause (autosave persists it).
+  const insertLibraryClause = useCallback(
+    (body: string) => {
+      const next = (content.trimEnd() + "\n\n" + body.trim()).trim();
+      setContent(next);
+      setAiLines(lineRange(next, body.trim()));
+      setHighlight(body.split("\n")[0] ?? null);
+      toast.success("بند از کتابخانه درج شد");
+    },
+    [content],
+  );
+
+  // Library: replace the whole document with a default template.
+  const loadTemplate = useCallback((tplContent: string) => {
+    setContent(tplContent);
+    setBaseline(tplContent);
+    setAiLines(new Set());
+    toast.success("قرارداد پیش‌فرض بارگذاری شد — برای ثبت، نسخه را ذخیره کنید");
+  }, []);
 
   const legend = [
     { cls: "bg-risk-safe", label: t("legendAdded") },
@@ -134,9 +148,27 @@ export function EditorWorkspace({
     { cls: "bg-[hsl(270_85%_65%)]", label: t("legendAi") },
   ];
 
+  const SaveStatus = () =>
+    dirty ? (
+      <span className="flex items-center gap-1 text-[11px] text-risk-medium">
+        <span className="size-1.5 rounded-full bg-risk-medium" />
+        {t("unsaved")}
+      </span>
+    ) : saving ? (
+      <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+        <Loader2 className="size-3 animate-spin" />
+        {t("saving")}
+      </span>
+    ) : (
+      <span className="flex items-center gap-1 text-[11px] text-risk-safe">
+        <Check className="size-3" />
+        {t("saved")}
+      </span>
+    );
+
   return (
     <div className="mesh-bg flex h-screen flex-col">
-      {/* Top bar */}
+      {/* Top bar — same chrome as the risk/changes views */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card/50 px-4 backdrop-blur">
         <Link href={`/contracts/${contractId}`} className="flex items-center gap-2">
           <span className="grid size-8 place-items-center rounded-lg bg-primary text-primary-foreground">
@@ -147,34 +179,15 @@ export function EditorWorkspace({
           <h1 className="truncate text-sm font-bold">{title}</h1>
           <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <PenLine className="size-3" />
-            {t("editorMode")} · v{locale === "fa" ? toPersianDigits(versionNumber) : versionNumber}
-            {dirty ? (
-              <span className="flex items-center gap-1 text-risk-medium">
-                <span className="size-1.5 rounded-full bg-risk-medium" />
-                {t("unsaved")}
-              </span>
-            ) : saving ? (
-              <span className="flex items-center gap-1">
-                <Loader2 className="size-3 animate-spin" />
-                {t("saving")}
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-risk-safe">
-                <Check className="size-3" />
-                {t("saved")}
-              </span>
-            )}
+            {t("editorMode")} · v{toPersianDigits(versionNumber)}
           </p>
         </div>
 
-        <div className="ms-auto flex items-center gap-1.5">
-          <Button asChild size="sm" variant="ghost" className="gap-1.5">
-            <Link href={`/contracts/${contractId}`}>
-              <BarChart3 className="size-3.5" />
-              <span className="hidden sm:inline">{t("analyzeView")}</span>
-            </Link>
-          </Button>
+        <div className="mx-auto">
+          <ContractTabBar contractId={contractId} active="editor" />
+        </div>
 
+        <div className="flex items-center gap-1.5">
           {/* mode toggle */}
           <div className="flex items-center rounded-lg bg-muted p-0.5">
             {(["suggest", "auto"] as const).map((md) => (
@@ -208,19 +221,22 @@ export function EditorWorkspace({
             <TooltipContent>{t("redo")}</TooltipContent>
           </Tooltip>
 
-          <Button size="sm" className="gap-1.5" onClick={saveVersion} disabled={saving || !dirty}>
-            <Save className="size-3.5" />
-            <span className="hidden sm:inline">{t("saveVersion")}</span>
-          </Button>
-          <LocaleToggle />
+          {/* save status sits next to the save button */}
+          <div className="flex items-center gap-2 rounded-lg border bg-card/60 px-2 py-1">
+            <SaveStatus />
+            <Button size="sm" className="h-7 gap-1.5" onClick={saveVersion} disabled={saving || !dirty}>
+              <Save className="size-3.5" />
+              <span className="hidden sm:inline">{t("saveVersion")}</span>
+            </Button>
+          </div>
           <ThemeToggle />
         </div>
       </header>
 
-      {/* 2-pane — assistant first so chat sits on the opposite side from analyze workspace */}
-      <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[clamp(340px,30vw,420px)_minmax(0,1fr)]">
-        {/* Assistant */}
-        <aside className="order-2 overflow-hidden border-e bg-card/20 lg:order-1">
+      {/* 3-pane — assistant (chat) · editor · blocks outline */}
+      <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[clamp(320px,27vw,400px)_minmax(0,1fr)_clamp(190px,16vw,240px)]">
+        {/* Assistant (default/primary chat) */}
+        <aside className="order-3 overflow-hidden border-e bg-card/20 lg:order-1">
           <DocumentAssistant
             contractId={contractId}
             locale={locale}
@@ -234,6 +250,7 @@ export function EditorWorkspace({
 
         {/* Editor */}
         <main className="order-1 flex flex-col overflow-hidden lg:order-2">
+          <EditorToolbar getView={() => viewRef.current} onOpenLibrary={() => setLibraryOpen(true)} />
           <div className="flex items-center gap-3 border-b bg-card/30 px-4 py-1.5 text-[10px] text-muted-foreground">
             {legend.map((l) => (
               <span key={l.label} className="flex items-center gap-1">
@@ -253,7 +270,19 @@ export function EditorWorkspace({
             />
           </div>
         </main>
+
+        {/* Blocks outline (each clause = a movable / deletable block) */}
+        <aside className="order-2 hidden overflow-hidden border-e bg-card/30 lg:order-3 lg:block">
+          <BlocksOutline content={content} onChange={setContent} onFocusBlock={(line) => setHighlight(line)} />
+        </aside>
       </div>
+
+      <LibraryDialog
+        open={libraryOpen}
+        onOpenChange={setLibraryOpen}
+        onInsertClause={insertLibraryClause}
+        onLoadTemplate={loadTemplate}
+      />
 
       <footer className="shrink-0 border-t bg-card/50 px-4 py-1.5 text-center text-[11px] text-muted-foreground">
         {t("disclaimer")}

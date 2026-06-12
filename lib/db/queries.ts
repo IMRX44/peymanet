@@ -83,6 +83,8 @@ export type WorkspaceData = {
     runId: string;
     overallRisk: number;
     headline: string;
+    analyzedAt: string | null;
+    changesSince: number;
     missingClauses: { type: string; importance: Severity; rationale: string; suggestedText: string | null }[];
     complianceIssues: { framework: string; severity: Severity; description: string; remediation: string | null }[];
     recommendations: { priority: Impact; title: string; description: string }[];
@@ -179,10 +181,16 @@ export async function getWorkspace(contractId: string, locale: string): Promise<
       prisma.recommendation.findMany({ where: { runId: run.id } }),
     ]);
     const summary = fromJson<{ headline?: { fa: string; en: string } }>(run.summaryJson, {});
+    // How many trunk document versions were saved after this analysis completed.
+    const changesSince = run.completedAt
+      ? await prisma.contractVersion.count({ where: { contractId, branchId: null, createdAt: { gt: run.completedAt } } })
+      : 0;
     analysis = {
       runId: run.id,
       overallRisk: run.overallRisk ?? 0,
       headline: summary.headline ? (locale === "en" ? summary.headline.en : summary.headline.fa) : "",
+      analyzedAt: (run.completedAt ?? run.createdAt).toISOString(),
+      changesSince,
       missingClauses: missing.map((m) => ({
         type: m.type,
         importance: m.importance as Severity,

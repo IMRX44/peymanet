@@ -94,7 +94,7 @@ export function RiskFloatingCard({ clause }: { clause: WorkspaceClause }) {
       {risk.alternativeClause && (
         <div>
           <p className="text-[11px] font-semibold text-muted-foreground">{t("alternativeClause")}</p>
-          <p dir="ltr" className="mt-0.5 rounded-md bg-muted/60 p-2 text-start font-latin text-xs leading-6">
+          <p dir="rtl" className="mt-0.5 rounded-md bg-muted/60 p-2 text-start text-xs leading-6">
             {risk.alternativeClause}
           </p>
         </div>

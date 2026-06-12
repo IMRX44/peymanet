@@ -7,7 +7,8 @@ import type { WorkspaceData } from "@/lib/db/queries";
 import type { Severity } from "@/lib/ai/schemas";
 
 type LiveScore = { score: number; severity: Severity };
-type Tab = "risk" | "timeline" | "negotiation";
+type Tab = "risk" | "negotiation";
+type View = "analyze" | "changes";
 
 type WorkspaceCtx = {
   data: WorkspaceData;
@@ -16,6 +17,9 @@ type WorkspaceCtx = {
   select: (id: string | null) => void;
   activeTab: Tab;
   setActiveTab: (t: Tab) => void;
+  view: View;
+  selectedVersionId: string | null;
+  selectVersion: (id: string | null) => void;
   focusClause: (clauseId: string) => void;
   liveScores: Record<string, LiveScore>;
   analyzing: boolean;
@@ -31,10 +35,19 @@ export function useWorkspace() {
   return ctx;
 }
 
-export function WorkspaceProvider({ data, children }: { data: WorkspaceData; children: React.ReactNode }) {
+export function WorkspaceProvider({
+  data,
+  view = "analyze",
+  children,
+}: {
+  data: WorkspaceData;
+  view?: View;
+  children: React.ReactNode;
+}) {
   const router = useRouter();
   const [selectedClauseId, setSelected] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("risk");
+  const [selectedVersionId, selectVersion] = useState<string | null>(null);
   const [liveScores, setLiveScores] = useState<Record<string, LiveScore>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
@@ -86,13 +99,16 @@ export function WorkspaceProvider({ data, children }: { data: WorkspaceData; chi
       select: setSelected,
       activeTab,
       setActiveTab,
+      view,
+      selectedVersionId,
+      selectVersion,
       focusClause,
       liveScores,
       analyzing,
       progress,
       runAnalysis,
     }),
-    [data, selectedClauseId, activeTab, focusClause, liveScores, analyzing, progress, runAnalysis],
+    [data, selectedClauseId, activeTab, view, selectedVersionId, focusClause, liveScores, analyzing, progress, runAnalysis],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

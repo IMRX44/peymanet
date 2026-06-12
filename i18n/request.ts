@@ -1,25 +1,17 @@
 import { getRequestConfig } from "next-intl/server";
-import { cookies } from "next/headers";
 
-export const locales = ["fa", "en"] as const;
+export const locales = ["fa"] as const;
 export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = (process.env.DEFAULT_LOCALE as Locale) || "fa";
+export const defaultLocale: Locale = "fa";
 
 export { isRtl } from "@/lib/i18n/localize";
 
 /**
- * next-intl "without i18n routing" setup: the active locale is read from a
- * cookie (toggled in the UI) and falls back to DEFAULT_LOCALE. No locale-prefixed
- * routes or middleware required.
+ * Peymanet is Persian-only: the active locale is always "fa". (English was
+ * removed from the product — see lib/ai/prompts.ts, which forces Persian output.)
  */
 export default getRequestConfig(async () => {
-  const store = await cookies();
-  const cookieLocale = store.get("locale")?.value;
-  const locale: Locale =
-    cookieLocale && (locales as readonly string[]).includes(cookieLocale)
-      ? (cookieLocale as Locale)
-      : defaultLocale;
-
+  const locale: Locale = "fa";
   return {
     locale,
     messages: (await import(`../messages/${locale}.json`)).default,

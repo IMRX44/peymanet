@@ -10,6 +10,8 @@ import type {
   Perspective,
   Bilingual,
   AssistantResponse,
+  PolicyComplianceResult,
+  PolicyStatus,
 } from "@/lib/ai/schemas";
 
 /**
@@ -47,7 +49,7 @@ const TEMPLATES: Template[] = [
       en: "Add a mutual minimum 30-day notice period and require just cause for termination.",
     },
     alternative:
-      "Either party may terminate this Agreement upon thirty (30) days' prior written notice. Termination for cause requires a written statement of cause and a cure period of fifteen (15) days.",
+      "هر یک از طرفین می‌تواند با اطلاع کتبی سی (۳۰) روزهٔ قبلی، این قرارداد را خاتمه دهد. فسخ به دلیل تخلف، مستلزم اعلام کتبیِ علت و اعطای مهلت پانزده (۱۵) روزه برای رفع تخلف است.",
   },
   {
     category: "liability",
@@ -66,7 +68,7 @@ const TEMPLATES: Template[] = [
       en: "Cap aggregate liability at the contract value and expressly exclude consequential damages.",
     },
     alternative:
-      "In no event shall either party's aggregate liability exceed the total fees paid under this Agreement; neither party shall be liable for indirect, incidental, or consequential damages.",
+      "در هیچ حالتی مسئولیت تجمعیِ هیچ‌یک از طرفین از مجموع مبالغ پرداخت‌شده به‌موجب این قرارداد فراتر نخواهد رفت؛ و هیچ‌یک از طرفین مسئول خسارات غیرمستقیم، اتفاقی یا تبعی نخواهد بود.",
   },
   {
     category: "payment",
@@ -85,7 +87,7 @@ const TEMPLATES: Template[] = [
       en: "Specify due dates (e.g., Net-15), payment method, and a daily late-payment penalty.",
     },
     alternative:
-      "Payment shall be due within fifteen (15) days of invoice. Overdue amounts accrue interest at 1.5% per month until paid in full.",
+      "پرداخت باید ظرف پانزده (۱۵) روز از تاریخ صورت‌حساب انجام شود. مبالغ معوق تا تسویهٔ کامل، مشمول جریمهٔ تأخیر روزشمار طبق توافق طرفین خواهد بود.",
   },
   {
     category: "ip",
@@ -104,7 +106,7 @@ const TEMPLATES: Template[] = [
       en: "Limit the assignment to deliverables related to the engagement scope and created during its term.",
     },
     alternative:
-      "Assignment of intellectual property is limited to deliverables produced specifically for this engagement; pre-existing and unrelated works remain the property of their creator.",
+      "واگذاری مالکیت فکری محدود به آثاری است که به‌طور خاص برای موضوع همین قرارداد و در زمان اجرای آن پدید آمده‌اند؛ آثار قبلی و نامرتبط در مالکیت پدیدآورندهٔ آن‌ها باقی می‌ماند.",
   },
   {
     category: "privacy",
@@ -123,7 +125,7 @@ const TEMPLATES: Template[] = [
       en: "Add purpose limitation, a defined retention period, and a data-subject deletion right.",
     },
     alternative:
-      "Personal data shall be processed solely for the purposes stated herein, retained no longer than necessary, and deleted upon written request of the data subject.",
+      "داده‌های شخصی صرفاً برای اهداف مصرح در این قرارداد پردازش می‌شوند، بیش از مدت لازم نگهداری نمی‌شوند و با درخواست کتبیِ صاحب داده حذف خواهند شد.",
   },
   {
     category: "privacy",
@@ -142,7 +144,7 @@ const TEMPLATES: Template[] = [
       en: "Make confidentiality mutual with a defined term (e.g., 3 years).",
     },
     alternative:
-      "The confidentiality obligations in this section are mutual and survive for three (3) years following termination.",
+      "تعهدات محرمانگی موضوع این بند، دوطرفه است و تا سه (۳) سال پس از خاتمهٔ قرارداد به قوت خود باقی می‌ماند.",
   },
   {
     category: "jurisdiction",
@@ -161,7 +163,7 @@ const TEMPLATES: Template[] = [
       en: "Provide for a neutral venue or arbitration with shared costs.",
     },
     alternative:
-      "Disputes shall be resolved by binding arbitration in a mutually agreed neutral venue, with costs shared equally between the parties.",
+      "اختلافات از طریق داوریِ الزام‌آور در یک مرجع بی‌طرفِ موردتوافق طرفین حل‌وفصل می‌شود و هزینه‌ها به‌طور مساوی میان طرفین تقسیم می‌گردد.",
   },
   {
     category: "compliance",
@@ -180,7 +182,7 @@ const TEMPLATES: Template[] = [
       en: "Align the clause with local statutory minimums.",
     },
     alternative:
-      "Notwithstanding the foregoing, in no event shall this clause derogate from the mandatory statutory protections applicable to the parties.",
+      "علی‌رغم مفاد فوق، این بند در هیچ حالتی نمی‌تواند از حداقل‌های حمایتیِ آمرهٔ قوانین جمهوری اسلامی ایران که شامل طرفین می‌شود، عدول کند.",
   },
 ];
 
@@ -201,7 +203,7 @@ const DEFAULT_TEMPLATE: Template = {
     en: "Define key terms and clarify ambiguous wording.",
   },
   alternative:
-    "For the avoidance of doubt, capitalized terms used in this clause have the meanings defined in the Definitions section.",
+    "برای رفع ابهام، اصطلاحات کلیدیِ به‌کاررفته در این بند، مطابق معانیِ تعریف‌شده در بخش «تعاریف» تفسیر می‌شوند.",
 };
 
 function pickTemplate(text: string): Template {
@@ -273,22 +275,22 @@ export function mockDocSummary(
       {
         type: "force_majeure",
         importance: "high",
-        rationale: { fa: "بند فورس ماژور برای پوشش رویدادهای خارج از کنترل وجود ندارد.", en: "A force majeure clause covering events beyond control is missing." },
-        suggestedText: "Neither party shall be liable for failure to perform due to events beyond its reasonable control.",
+        rationale: { fa: "بند فورس ماژور برای پوشش رویدادهای خارج از کنترل وجود ندارد.", en: "بند فورس ماژور برای پوشش رویدادهای خارج از کنترل وجود ندارد." },
+        suggestedText: "هیچ‌یک از طرفین در قبال قصور در انجام تعهد به‌دلیل رویدادهای خارج از کنترل متعارف خود، مسئول نخواهد بود.",
       },
       {
         type: "dispute_resolution",
         importance: "medium",
-        rationale: { fa: "سازوکار حل اختلاف پیش از مراجعه به دادگاه مشخص نشده است.", en: "No pre-litigation dispute-resolution mechanism is specified." },
-        suggestedText: "The parties shall first attempt to resolve disputes through good-faith negotiation, then mediation.",
+        rationale: { fa: "سازوکار حل اختلاف پیش از مراجعه به دادگاه مشخص نشده است.", en: "سازوکار حل اختلاف پیش از مراجعه به دادگاه مشخص نشده است." },
+        suggestedText: "طرفین ابتدا تلاش می‌کنند اختلافات را از طریق مذاکرهٔ با حسن نیت و سپس میانجی‌گری حل کنند.",
       },
     ],
     complianceIssues: [
       {
-        framework: "local-labor-law",
+        framework: "قانون کار ایران",
         severity: "high",
-        description: { fa: "برخی شروط ممکن است با حداقل‌های قانون کار مغایرت داشته باشند.", en: "Some terms may conflict with statutory labor-law minimums." },
-        remediation: { fa: "شروط با حداقل‌های قانونی هماهنگ شوند.", en: "Align terms with statutory minimums." },
+        description: { fa: "برخی شروط ممکن است با حداقل‌های آمرهٔ قانون کار جمهوری اسلامی ایران مغایرت داشته باشند.", en: "برخی شروط ممکن است با حداقل‌های آمرهٔ قانون کار جمهوری اسلامی ایران مغایرت داشته باشند." },
+        remediation: { fa: "شروط با حداقل‌های قانونیِ قانون کار ایران هماهنگ شوند.", en: "شروط با حداقل‌های قانونیِ قانون کار ایران هماهنگ شوند." },
       },
     ],
     recommendations: [
@@ -449,6 +451,69 @@ export function mockAssistant(document: string, message: string): AssistantRespo
       : { fa: "موردی صریح در این باره در سند پیدا نکردم؛ احتمالاً این بند جا افتاده است.", en: "I couldn't find an explicit provision on that; it may be a missing clause." },
     highlight: hit ? hit.trim().slice(0, 50) : null,
   };
+}
+
+/**
+ * Deterministic org-policy compliance check.
+ * Each non-empty line of `policies` is matched against the document by shared
+ * keywords; a deterministic seeded jitter occasionally flags a violation so the
+ * demo shows all three states.
+ */
+export function mockPolicyCompliance(document: string, policies: string): PolicyComplianceResult {
+  const doc = document.toLowerCase();
+  const lines = policies
+    .split("\n")
+    .map((l) => l.replace(/^[-•*\d.)\s]+/, "").trim())
+    .filter((l) => l.length > 2);
+
+  const findings = lines.map((policy) => {
+    const rng = seededRandom(policy + document.length);
+    const keywords = policy
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((w) => w.length >= 4);
+    const hits = keywords.filter((w) => doc.includes(w)).length;
+    const ratio = keywords.length ? hits / keywords.length : 0;
+
+    let status: PolicyStatus;
+    if (ratio >= 0.5) status = rng() > 0.7 ? "violation" : "compliant";
+    else if (ratio > 0) status = rng() > 0.5 ? "unclear" : "violation";
+    else status = "unclear";
+
+    const matchLine =
+      keywords.map((w) => document.split("\n").find((l) => l.toLowerCase().includes(w))).find(Boolean) ?? null;
+
+    const detail: Bilingual =
+      status === "compliant"
+        ? { fa: "قرارداد با این سیاست سازمان منطبق است.", en: "قرارداد با این سیاست سازمان منطبق است." }
+        : status === "violation"
+          ? { fa: "بندی در قرارداد یافت شد که با این سیاست مغایرت دارد و باید اصلاح شود.", en: "بندی در قرارداد یافت شد که با این سیاست مغایرت دارد و باید اصلاح شود." }
+          : { fa: "قرارداد در این مورد ساکت است؛ افزودن بندی صریح توصیه می‌شود.", en: "قرارداد در این مورد ساکت است؛ افزودن بندی صریح توصیه می‌شود." };
+
+    return { policy, status, detail, clause: status === "compliant" || status === "violation" ? matchLine?.trim() ?? null : null };
+  });
+
+  const violations = findings.filter((f) => f.status === "violation").length;
+  const overall = violations === 0 ? (findings.every((f) => f.status === "compliant") ? "compliant" : "partial") : "violation";
+
+  return {
+    overall: overall as PolicyComplianceResult["overall"],
+    summary: {
+      fa:
+        violations > 0
+          ? `${toFa(violations)} مغایرت با سیاست‌های سازمان شناسایی شد.`
+          : "مغایرت آشکاری با سیاست‌های سازمان یافت نشد.",
+      en:
+        violations > 0
+          ? `${toFa(violations)} مغایرت با سیاست‌های سازمان شناسایی شد.`
+          : "مغایرت آشکاری با سیاست‌های سازمان یافت نشد.",
+    },
+    findings,
+  };
+}
+
+function toFa(n: number): string {
+  return n.toString().replace(/\d/g, (d) => "۰۱۲۳۴۵۶۷۸۹"[Number(d)]);
 }
 
 /** Deterministic counterparty reply for the war-game chat. */
