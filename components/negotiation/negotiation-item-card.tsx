@@ -59,15 +59,16 @@ export function NegotiationItemCard({
               {item.exploitable && <Badge variant="muted" className="text-[9px] text-risk-critical">{t("exploitable")}</Badge>}
             </div>
             {/* risk transition */}
-            <div className="mt-1.5 flex items-center gap-2 text-xs">
-              <span className="font-bold tabular-nums" style={{ color: SEVERITY_HEX[scoreToSeverity(item.currentRisk)] }}>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span>{t("currentRisk")}</span>
+              <span className="font-bold tabular-nums text-foreground" style={{ color: SEVERITY_HEX[scoreToSeverity(item.currentRisk)] }}>
                 {locale === "fa" ? toPersianDigits(item.currentRisk) : item.currentRisk}
               </span>
-              <ArrowLeft className="size-3 text-muted-foreground rtl:rotate-0 ltr:rotate-180" />
-              <span className="font-bold tabular-nums" style={{ color: SEVERITY_HEX[scoreToSeverity(item.projectedRisk)] }}>
+              <ArrowLeft className="size-3 shrink-0 rtl:rotate-180" />
+              <span>{t("projectedRisk")}</span>
+              <span className="font-bold tabular-nums text-foreground" style={{ color: SEVERITY_HEX[scoreToSeverity(item.projectedRisk)] }}>
                 {locale === "fa" ? toPersianDigits(item.projectedRisk) : item.projectedRisk}
               </span>
-              <span className="text-muted-foreground">{t("currentRisk")} → {t("projectedRisk")}</span>
             </div>
           </div>
           {/* include in simulation */}

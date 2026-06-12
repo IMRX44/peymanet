@@ -17,8 +17,6 @@ type WorkspaceCtx = {
   activeTab: Tab;
   setActiveTab: (t: Tab) => void;
   focusClause: (clauseId: string) => void;
-  showPatterns: boolean;
-  togglePatterns: () => void;
   liveScores: Record<string, LiveScore>;
   analyzing: boolean;
   progress: { current: number; total: number } | null;
@@ -37,7 +35,6 @@ export function WorkspaceProvider({ data, children }: { data: WorkspaceData; chi
   const router = useRouter();
   const [selectedClauseId, setSelected] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("risk");
-  const [showPatterns, setShowPatterns] = useState(false);
   const [liveScores, setLiveScores] = useState<Record<string, LiveScore>>({});
   const [analyzing, setAnalyzing] = useState(false);
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
@@ -56,6 +53,7 @@ export function WorkspaceProvider({ data, children }: { data: WorkspaceData; chi
     setAnalyzing(true);
     setLiveScores({});
     setProgress({ current: 0, total: data.clauses.length });
+    let finished = false;
     const es = new EventSource(`/api/contracts/${data.contract.id}/analyze`);
     es.addEventListener("clause", (e) => {
       const d = JSON.parse((e as MessageEvent).data);
@@ -63,17 +61,21 @@ export function WorkspaceProvider({ data, children }: { data: WorkspaceData; chi
       setProgress({ current: d.current, total: d.total });
     });
     es.addEventListener("done", () => {
+      finished = true;
       es.close();
       setAnalyzing(false);
       setProgress(null);
       toast.success(data.locale === "en" ? "Risk scan complete" : "اسکن ریسک کامل شد");
       router.refresh();
     });
-    es.addEventListener("error", () => {
+    es.onerror = () => {
+      // EventSource fires `error` on normal close — ignore that path.
+      if (finished || es.readyState === EventSource.CLOSED) return;
       es.close();
       setAnalyzing(false);
       setProgress(null);
-    });
+      toast.error(data.locale === "en" ? "Risk scan failed" : "اسکن ریسک ناموفق بود");
+    };
   }, [analyzing, data.clauses.length, data.contract.id, data.locale, router]);
 
   const value = useMemo<WorkspaceCtx>(
@@ -85,14 +87,12 @@ export function WorkspaceProvider({ data, children }: { data: WorkspaceData; chi
       activeTab,
       setActiveTab,
       focusClause,
-      showPatterns,
-      togglePatterns: () => setShowPatterns((v) => !v),
       liveScores,
       analyzing,
       progress,
       runAnalysis,
     }),
-    [data, selectedClauseId, activeTab, focusClause, showPatterns, liveScores, analyzing, progress, runAnalysis],
+    [data, selectedClauseId, activeTab, focusClause, liveScores, analyzing, progress, runAnalysis],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

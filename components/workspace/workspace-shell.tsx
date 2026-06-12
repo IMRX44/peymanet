@@ -2,12 +2,10 @@
 
 import Link from "next/link";
 import { useTranslations } from "next-intl";
-import { Scale, ScanLine, Loader2, Eye, ChevronRight, ShieldAlert, GitBranch, Handshake, PenLine } from "lucide-react";
+import { Scale, ScanLine, Loader2, ChevronRight, ShieldAlert, GitBranch, Handshake, PenLine } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ThemeToggle, LocaleToggle } from "@/components/shared/toggles";
 import { ContractHeatmap } from "@/components/heatmap/contract-heatmap";
 import { RiskDashboard } from "@/components/heatmap/risk-dashboard";
@@ -15,15 +13,16 @@ import { TimelinePanel } from "@/components/timeline/timeline-panel";
 import { NegotiationCenter } from "@/components/negotiation/negotiation-center";
 import { useWorkspace } from "@/components/workspace/workspace-store";
 import { CONTRACT_TYPE_LABELS } from "@/lib/constants";
-import { pickBilingual } from "@/lib/i18n/localize";
+import { pickBilingual, isRtl } from "@/lib/i18n/localize";
 import { SEVERITY_HEX } from "@/lib/risk/colors";
-import { toPersianDigits } from "@/lib/utils";
+import { cn, toPersianDigits } from "@/lib/utils";
 import type { ContractType } from "@/lib/ai/schemas";
 
 export function WorkspaceShell() {
   const t = useTranslations("workspace");
   const tc = useTranslations("common");
-  const { data, locale, activeTab, setActiveTab, analyzing, runAnalysis, showPatterns, togglePatterns, focusClause, liveScores } = useWorkspace();
+  const { data, locale, activeTab, setActiveTab, analyzing, runAnalysis, focusClause, liveScores } = useWorkspace();
+  const rtl = isRtl(locale);
 
   return (
     <div className="mesh-bg flex h-screen flex-col">
@@ -54,15 +53,6 @@ export function WorkspaceShell() {
               {tc("mockMode")}
             </Badge>
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-1.5 rounded-md px-2 py-1">
-                <Eye className="size-3.5 text-muted-foreground" />
-                <Switch checked={showPatterns} onCheckedChange={togglePatterns} />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>{tc("togglePatterns")}</TooltipContent>
-          </Tooltip>
           <Button size="sm" variant="outline" className="gap-1.5" onClick={runAnalysis} disabled={analyzing}>
             {analyzing ? <Loader2 className="size-3.5 animate-spin" /> : <ScanLine className="size-3.5" />}
             <span className="hidden sm:inline">{analyzing ? t("analyzing") : t("reanalyze")}</span>
@@ -78,10 +68,73 @@ export function WorkspaceShell() {
         </div>
       </header>
 
-      {/* 3-pane */}
-      <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[232px_minmax(0,1fr)_clamp(380px,32vw,460px)]">
-        {/* Left rail: clause nav */}
-        <aside className="hidden overflow-y-auto scrollbar-thin border-e bg-card/30 p-3 lg:block">
+      {/* 3-pane — LTR: context | heatmap | clause · RTL: clause | heatmap | context */}
+      <div
+        className={cn(
+          "grid flex-1 grid-cols-1 overflow-hidden",
+          rtl
+            ? "lg:grid-cols-[232px_minmax(0,1fr)_clamp(380px,32vw,460px)]"
+            : "lg:grid-cols-[clamp(380px,32vw,460px)_minmax(0,1fr)_232px]",
+        )}
+      >
+        {/* Context rail: risk / timeline / negotiation */}
+        <aside
+          dir={rtl ? "rtl" : "ltr"}
+          lang={locale}
+          className={cn(
+            "order-2 overflow-y-auto scrollbar-thin border-e bg-card/20 text-start",
+            rtl ? "lg:order-3" : "lg:order-1",
+          )}
+        >
+          <Tabs
+            dir={rtl ? "rtl" : "ltr"}
+            lang={locale}
+            value={activeTab}
+            onValueChange={(v) => setActiveTab(v as typeof activeTab)}
+            className="flex h-full w-full flex-col"
+          >
+            <div className="sticky top-0 z-10 border-b bg-card/80 p-2 backdrop-blur">
+              <TabsList dir={rtl ? "rtl" : "ltr"} className="grid h-10 w-full grid-cols-3">
+                <TabsTrigger value="risk" className="gap-1 text-xs">
+                  <ShieldAlert className="size-3.5" />
+                  {t("riskTab")}
+                </TabsTrigger>
+                <TabsTrigger value="timeline" className="gap-1 text-xs">
+                  <GitBranch className="size-3.5" />
+                  {t("timelineTab")}
+                </TabsTrigger>
+                <TabsTrigger value="negotiation" className="gap-1 text-xs">
+                  <Handshake className="size-3.5" />
+                  {t("negotiationTab")}
+                </TabsTrigger>
+              </TabsList>
+            </div>
+            <TabsContent value="risk" dir={rtl ? "rtl" : "ltr"} lang={locale} className="mt-0 w-full text-start">
+              <RiskDashboard />
+            </TabsContent>
+            <TabsContent value="timeline" dir={rtl ? "rtl" : "ltr"} lang={locale} className="mt-0 w-full text-start">
+              <TimelinePanel />
+            </TabsContent>
+            <TabsContent value="negotiation" dir={rtl ? "rtl" : "ltr"} lang={locale} className="mt-0 w-full text-start">
+              <NegotiationCenter />
+            </TabsContent>
+          </Tabs>
+        </aside>
+
+        {/* Center: heatmap */}
+        <main className="order-1 overflow-hidden border-e lg:order-2">
+          <ContractHeatmap />
+        </main>
+
+        {/* Clause TOC */}
+        <aside
+          dir={rtl ? "rtl" : "ltr"}
+          lang={locale}
+          className={cn(
+            "order-3 hidden overflow-y-auto scrollbar-thin bg-card/30 p-3 text-start lg:block",
+            rtl ? "lg:order-1" : "lg:order-3",
+          )}
+        >
           <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             {t("clausesCount")} · {locale === "fa" ? toPersianDigits(data.clauses.length) : data.clauses.length}
           </p>
@@ -101,42 +154,6 @@ export function WorkspaceShell() {
               );
             })}
           </div>
-        </aside>
-
-        {/* Center: heatmap */}
-        <main className="overflow-hidden border-e">
-          <ContractHeatmap />
-        </main>
-
-        {/* Right rail: tabs */}
-        <aside className="overflow-y-auto scrollbar-thin bg-card/20">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex h-full flex-col">
-            <div className="sticky top-0 z-10 border-b bg-card/80 p-2 backdrop-blur">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="risk" className="gap-1 text-xs">
-                  <ShieldAlert className="size-3.5" />
-                  {t("riskTab")}
-                </TabsTrigger>
-                <TabsTrigger value="timeline" className="gap-1 text-xs">
-                  <GitBranch className="size-3.5" />
-                  {t("timelineTab")}
-                </TabsTrigger>
-                <TabsTrigger value="negotiation" className="gap-1 text-xs">
-                  <Handshake className="size-3.5" />
-                  {t("negotiationTab")}
-                </TabsTrigger>
-              </TabsList>
-            </div>
-            <TabsContent value="risk" className="mt-0">
-              <RiskDashboard />
-            </TabsContent>
-            <TabsContent value="timeline" className="mt-0">
-              <TimelinePanel />
-            </TabsContent>
-            <TabsContent value="negotiation" className="mt-0">
-              <NegotiationCenter />
-            </TabsContent>
-          </Tabs>
         </aside>
       </div>
 

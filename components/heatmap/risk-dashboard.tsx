@@ -28,7 +28,7 @@ export function RiskDashboard() {
   }
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="w-full space-y-4 p-4 text-start">
       {/* Overall */}
       <Card className="overflow-hidden">
         <CardContent className="flex flex-col items-center gap-3 p-5">
@@ -52,7 +52,7 @@ export function RiskDashboard() {
             <motion.button
               key={c.id}
               onClick={() => focusClause(c.id)}
-              initial={{ opacity: 0, x: 6 }}
+              initial={{ opacity: 0, x: locale === "fa" ? -6 : 6 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.03 }}
               className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start transition-colors hover:bg-muted"
@@ -62,7 +62,7 @@ export function RiskDashboard() {
               <span className="text-xs font-bold tabular-nums" style={{ color: SEVERITY_HEX[c.risk!.severity] }}>
                 {locale === "fa" ? toPersianDigits(c.risk!.score) : c.risk!.score}
               </span>
-              <ChevronLeft className="size-3 text-muted-foreground rtl:rotate-0 ltr:rotate-180" />
+              <ChevronLeft className="size-3 shrink-0 text-muted-foreground rtl:rotate-180" />
             </motion.button>
           ))}
         </CardContent>

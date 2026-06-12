@@ -78,7 +78,7 @@ export function TimelinePanel() {
     });
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="w-full space-y-4 p-4 text-start">
       {/* header */}
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="me-auto flex items-center gap-2 text-sm font-semibold">

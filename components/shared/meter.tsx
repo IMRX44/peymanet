@@ -20,7 +20,7 @@ export function Meter({
   return (
     <div className={cn("w-full overflow-hidden rounded-full bg-muted", className)} style={{ height }}>
       <motion.div
-        className="h-full rounded-full"
+        className="h-full rounded-full rtl:ms-auto"
         style={{ background: color }}
         initial={{ width: 0 }}
         animate={{ width: `${Math.max(0, Math.min(1, value)) * 100}%` }}

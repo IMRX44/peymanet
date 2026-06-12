@@ -48,14 +48,6 @@ export const SEVERITY_BORDER_CLASS: Record<Severity, string> = {
   critical: "border-risk-critical/60",
 };
 
-/** Colorblind-safe texture (diagonal hatch) by severity — toggled in UI. */
-export const SEVERITY_PATTERN: Record<Severity, string> = {
-  safe: "",
-  medium: "repeating-linear-gradient(45deg, transparent, transparent 3px, currentColor 3px, currentColor 4px)",
-  high: "repeating-linear-gradient(45deg, transparent, transparent 2px, currentColor 2px, currentColor 3px)",
-  critical: "repeating-linear-gradient(0deg, transparent, transparent 2px, currentColor 2px, currentColor 3px)",
-};
-
 export function severityRank(s: Severity): number {
   return { safe: 0, medium: 1, high: 2, critical: 3 }[s];
 }

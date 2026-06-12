@@ -12,7 +12,6 @@
     "viewAll": "View all",
     "toggleTheme": "Toggle theme",
     "toggleLocale": "فارسی",
-    "togglePatterns": "Colorblind mode",
     "disclaimer": "This is AI-generated guidance and does not constitute legal advice.",
     "mockMode": "Demo mode (no API key)"
   },

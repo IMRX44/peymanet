@@ -12,7 +12,7 @@ const TabsList = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.List
     ref={ref}
-    className={cn("inline-flex h-10 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground", className)}
+    className={cn("grid h-10 w-full grid-cols-3 rounded-lg bg-muted p-1 text-muted-foreground", className)}
     {...props}
   />
 ));
@@ -39,7 +39,7 @@ const TabsContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <TabsPrimitive.Content
     ref={ref}
-    className={cn("ring-offset-background focus-visible:outline-none", className)}
+    className={cn("mt-2 w-full text-start ring-offset-background focus-visible:outline-none", className)}
     {...props}
   />
 ));

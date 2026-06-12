@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { RiskFloatingCard } from "@/components/heatmap/risk-floating-card";
 import { useWorkspace } from "@/components/workspace/workspace-store";
-import { SEVERITY_HEX, SEVERITY_PATTERN } from "@/lib/risk/colors";
+import { SEVERITY_HEX } from "@/lib/risk/colors";
 import { cn, toPersianDigits } from "@/lib/utils";
 import type { WorkspaceClause } from "@/lib/db/queries";
 import type { Severity } from "@/lib/ai/schemas";
@@ -12,7 +12,7 @@ import type { Severity } from "@/lib/ai/schemas";
 const TINT: Record<Severity, number> = { safe: 0.1, medium: 0.14, high: 0.2, critical: 0.27 };
 
 export function RiskClause({ clause }: { clause: WorkspaceClause }) {
-  const { liveScores, showPatterns, locale, selectedClauseId, select } = useWorkspace();
+  const { liveScores, locale, selectedClauseId, select } = useWorkspace();
   const live = liveScores[clause.id];
   const severity: Severity | null = live?.severity ?? clause.risk?.severity ?? null;
   const score = live?.score ?? clause.risk?.score ?? null;
@@ -40,12 +40,6 @@ export function RiskClause({ clause }: { clause: WorkspaceClause }) {
               initial={{ opacity: 0 }}
               animate={{ opacity: TINT[severity] }}
               transition={{ duration: 0.5, ease: "easeOut" }}
-            />
-          )}
-          {showPatterns && severity && SEVERITY_PATTERN[severity] && (
-            <div
-              className="pointer-events-none absolute inset-y-0 start-0 w-6 rounded-s-lg opacity-30"
-              style={{ color: SEVERITY_HEX[severity], backgroundImage: SEVERITY_PATTERN[severity] }}
             />
           )}
 

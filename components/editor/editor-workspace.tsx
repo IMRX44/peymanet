@@ -104,7 +104,9 @@ export function EditorWorkspace({
       setAiLines(lineRange(next, replacement));
       setSavedContent(next);
       setBaseline(next);
-      void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_rewrote_section", summary });
+      void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_rewrote_section", summary }).then((res) => {
+        if (!res.ok) toast.error(res.error ?? (locale === "en" ? "Could not save AI edit" : "ذخیره‌ی ویرایش هوش مصنوعی ناموفق بود"));
+      });
       toast.success(locale === "en" ? "AI edit applied" : "ویرایش هوش مصنوعی اعمال شد");
     },
     [content, contractId, locale],
@@ -117,7 +119,9 @@ export function EditorWorkspace({
       setAiLines(lineRange(next, clause.trim()));
       setSavedContent(next);
       setBaseline(next);
-      void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_added_clause", summary });
+      void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_added_clause", summary }).then((res) => {
+        if (!res.ok) toast.error(res.error ?? (locale === "en" ? "Could not save inserted clause" : "ذخیره‌ی بند جدید ناموفق بود"));
+      });
       toast.success(locale === "en" ? "Clause inserted" : "بند جدید درج شد");
     },
     [content, contractId, locale],
@@ -213,10 +217,23 @@ export function EditorWorkspace({
         </div>
       </header>
 
-      {/* 2-pane */}
-      <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(0,1fr)_clamp(340px,30vw,420px)]">
+      {/* 2-pane — assistant first so chat sits on the opposite side from analyze workspace */}
+      <div className="grid flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[clamp(340px,30vw,420px)_minmax(0,1fr)]">
+        {/* Assistant */}
+        <aside className="order-2 overflow-hidden border-e bg-card/20 lg:order-1">
+          <DocumentAssistant
+            contractId={contractId}
+            locale={locale}
+            document={content}
+            mode={mode}
+            onApplyEdit={applyEdit}
+            onApplyInsert={applyInsert}
+            onHighlight={setHighlight}
+          />
+        </aside>
+
         {/* Editor */}
-        <main className="flex flex-col overflow-hidden border-e">
+        <main className="order-1 flex flex-col overflow-hidden lg:order-2">
           <div className="flex items-center gap-3 border-b bg-card/30 px-4 py-1.5 text-[10px] text-muted-foreground">
             {legend.map((l) => (
               <span key={l.label} className="flex items-center gap-1">
@@ -236,19 +253,6 @@ export function EditorWorkspace({
             />
           </div>
         </main>
-
-        {/* Assistant */}
-        <aside className="overflow-hidden bg-card/20">
-          <DocumentAssistant
-            contractId={contractId}
-            locale={locale}
-            document={content}
-            mode={mode}
-            onApplyEdit={applyEdit}
-            onApplyInsert={applyInsert}
-            onHighlight={setHighlight}
-          />
-        </aside>
       </div>
 
       <footer className="shrink-0 border-t bg-card/50 px-4 py-1.5 text-center text-[11px] text-muted-foreground">

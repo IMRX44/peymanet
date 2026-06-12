@@ -36,13 +36,23 @@ export function NegotiationCenter() {
 
   const generate = () =>
     startGen(async () => {
-      await generateNegotiationAction(data.contract.id, perspective);
-      toast.success(locale === "en" ? "Negotiation report ready" : "گزارش مذاکره آماده شد");
-      router.refresh();
+      try {
+        const res = await generateNegotiationAction(data.contract.id, perspective);
+        if (!res.ok) {
+          toast.error(
+            res.error ?? (locale === "en" ? "Negotiation report failed" : "گزارش مذاکره ناموفق بود"),
+          );
+          return;
+        }
+        toast.success(locale === "en" ? "Negotiation report ready" : "گزارش مذاکره آماده شد");
+        router.refresh();
+      } catch {
+        toast.error(locale === "en" ? "Negotiation report failed" : "گزارش مذاکره ناموفق بود");
+      }
     });
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="w-full space-y-4 p-4 text-start">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="me-auto flex items-center gap-2 text-sm font-semibold">
           <Handshake className="size-4 text-risk-safe" />
@@ -162,7 +172,7 @@ function NegotiationBody({
             {report.talkingPoints.map((p, i) => (
               <motion.div
                 key={i}
-                initial={{ opacity: 0, x: 8 }}
+                initial={{ opacity: 0, x: locale === "fa" ? -8 : 8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
                 className="flex gap-2 text-xs leading-6"
