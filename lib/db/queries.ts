@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { fromJson } from "@/lib/db/json";
 import { localize } from "@/lib/i18n/localize";
-import { aiMode } from "@/lib/ai/models";
+import { resolveAi } from "@/lib/ai/resolve";
 import type { RiskCategory, Severity, Difficulty, Impact, Perspective } from "@/lib/ai/schemas";
 import type { DiffSegment } from "@/lib/diff/textDiff";
 
@@ -97,13 +97,17 @@ export type WorkspaceData = {
   negotiation: NegotiationView | null;
 };
 
-export async function getContractIds(): Promise<string[]> {
-  const rows = await prisma.contract.findMany({ select: { id: true } });
+export async function getContractIds(ownerId?: string): Promise<string[]> {
+  const rows = await prisma.contract.findMany({
+    where: ownerId ? { ownerId } : undefined,
+    select: { id: true },
+  });
   return rows.map((r) => r.id);
 }
 
-export async function listContracts(locale: string) {
+export async function listContracts(locale: string, ownerId?: string) {
   const contracts = await prisma.contract.findMany({
+    where: ownerId ? { ownerId } : undefined,
     orderBy: { updatedAt: "desc" },
     include: {
       analysisRuns: { orderBy: { createdAt: "desc" }, take: 1 },
@@ -120,9 +124,11 @@ export async function listContracts(locale: string) {
   }));
 }
 
-export async function getWorkspace(contractId: string, locale: string): Promise<WorkspaceData | null> {
+export async function getWorkspace(contractId: string, locale: string, ownerId?: string): Promise<WorkspaceData | null> {
   const contract = await prisma.contract.findUnique({ where: { id: contractId } });
   if (!contract) return null;
+  // Ownership guard: never expose another user's contract.
+  if (ownerId && contract.ownerId && contract.ownerId !== ownerId) return null;
 
   const version = contract.headVersionId
     ? await prisma.contractVersion.findUnique({ where: { id: contract.headVersionId } })
@@ -264,8 +270,9 @@ export async function getWorkspace(contractId: string, locale: string): Promise<
       }
     : null;
 
+  const ai = await resolveAi();
   return {
-    aiMode: aiMode(),
+    aiMode: ai.mode === "mock" ? "mock" : "openai",
     locale,
     contract: {
       id: contract.id,

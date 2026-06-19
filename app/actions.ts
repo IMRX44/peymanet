@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db/prisma";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, signIn, signUp, signOut } from "@/lib/auth";
+import { encryptSecret } from "@/lib/crypto";
 import { recordEvent } from "@/lib/events/events";
 import { restoreVersion, commitEdit } from "@/lib/events/versions";
 import { createBranch, mergeBranch } from "@/lib/events/branches";
@@ -76,7 +77,7 @@ export async function applyFixAction(clauseId: string) {
         severity: scoreToSeverity(newScore),
         explanation: JSON.stringify({
           fa: "این بند پس از اعمال اصلاح پیشنهادی، اکنون متوازن و کم‌ریسک است. (این تغییر فقط در تب تحلیل ریسک اعمال شده و روی متن قرارداد اثری ندارد.)",
-          en: "این بند پس از اعمال اصلاح پیشنهادی، اکنون متوازن و کم‌ریسک است. (این تغییر فقط در تب تحلیل ریسک اعمال شده و روی متن قرارداد اثری ندارد.)",
+          en: "After applying the suggested fix, this clause is now balanced and low-risk. (This change is applied only in the risk-analysis tab and does not affect the contract text.)",
         }),
       },
     });
@@ -200,48 +201,47 @@ export async function generateNegotiationAction(contractId: string, perspective:
     const pair = PERSPECTIVE_PAIRS[contract.type as ContractType];
     const counterparty = pair ? (pair[0] === perspective ? pair[1] : pair[0]) : null;
 
-    // Replace any existing report for this perspective.
-    await prisma.negotiationReport.deleteMany({ where: { contractId, perspective } });
-    const report = await prisma.negotiationReport.create({
-      data: {
-        contractId,
-        versionId: contract.headVersionId,
-        perspective,
-        counterparty,
-        opportunityScore: result.opportunityScore,
-        riskReductionPotential: result.riskReductionPotential,
-        model: run?.model ?? "mock",
-        talkingPointsJson: JSON.stringify(result.talkingPoints),
-      },
-    });
-    for (const it of result.items) {
-      const clause = clauses.find((c) => c.index === it.clauseIndex);
-      await prisma.negotiationItem.create({
+    // Replace any existing report for this perspective — atomically, so a
+    // failure can never leave the user with no report (delete + recreate).
+    const headVersionId = contract.headVersionId;
+    const report = await prisma.$transaction(async (tx) => {
+      await tx.negotiationReport.deleteMany({ where: { contractId, perspective } });
+      const rep = await tx.negotiationReport.create({
         data: {
-          reportId: report.id,
-          clauseId: clause?.id ?? null,
-          title: JSON.stringify(it.title),
-          currentRisk: it.currentRisk,
-          projectedRisk: it.projectedRisk,
-          oneSided: it.oneSided,
-          unfair: it.unfair,
-          exploitable: it.exploitable,
-          suggestedChange: JSON.stringify(it.suggestedChange),
-          strategy: JSON.stringify(it.strategy),
-          expectedCounterArgument: JSON.stringify(it.expectedCounterArgument),
-          suggestedResponse: JSON.stringify(it.suggestedResponse),
-          winProbability: it.winProbability,
-          difficulty: it.difficulty,
-          businessImpact: it.businessImpact,
-          legalImpact: it.legalImpact,
+          contractId,
+          versionId: headVersionId,
+          perspective,
+          counterparty,
+          opportunityScore: result.opportunityScore,
+          riskReductionPotential: result.riskReductionPotential,
+          model: run?.model ?? "mock",
+          talkingPointsJson: JSON.stringify(result.talkingPoints),
+          items: {
+            create: result.items.map((it) => ({
+              clauseId: clauses.find((c) => c.index === it.clauseIndex)?.id ?? null,
+              title: JSON.stringify(it.title),
+              currentRisk: it.currentRisk,
+              projectedRisk: it.projectedRisk,
+              oneSided: it.oneSided,
+              unfair: it.unfair,
+              exploitable: it.exploitable,
+              suggestedChange: JSON.stringify(it.suggestedChange),
+              strategy: JSON.stringify(it.strategy),
+              expectedCounterArgument: JSON.stringify(it.expectedCounterArgument),
+              suggestedResponse: JSON.stringify(it.suggestedResponse),
+              winProbability: it.winProbability,
+              difficulty: it.difficulty,
+              businessImpact: it.businessImpact,
+              legalImpact: it.legalImpact,
+            })),
+          },
+          checklist: {
+            create: result.checklist.map((ch) => ({ label: JSON.stringify(ch.label), priority: ch.priority })),
+          },
         },
       });
-    }
-    for (const ch of result.checklist) {
-      await prisma.checklistItem.create({
-        data: { reportId: report.id, label: JSON.stringify(ch.label), priority: ch.priority },
-      });
-    }
+      return rep;
+    });
 
     revalidateContract(contractId);
     return { ok: true as const, reportId: report.id };
@@ -394,19 +394,21 @@ const STARTER_DOC =
 /** Create a new contract with an initial version + segmented clauses + a "created" event. */
 export async function createContractAction(args: { title: string; type: string; content?: string }) {
   try {
-    const title = args.title.trim();
+    const user = await getCurrentUser();
+    if (!user) return { ok: false as const, error: "ابتدا وارد حساب کاربری شوید." };
+
+    const title = args.title.trim().slice(0, 200);
     if (!title) return { ok: false as const, error: "title required" };
     const type = (CONTRACT_TYPES as readonly string[]).includes(args.type) ? args.type : "other";
     const content = (args.content ?? "").trim() || STARTER_DOC;
 
-    const user = await getCurrentUser();
-    // Attach to the first org (single-tenant demo); create one if none exists.
+    // Attach to the user's own org (create one if the user has none).
     const org =
-      (await prisma.organization.findFirst()) ??
-      (await prisma.organization.create({ data: { name: "سازمان پیمانت", slug: `org-${Date.now()}` } }));
+      (user.orgId ? await prisma.organization.findUnique({ where: { id: user.orgId } }) : null) ??
+      (await prisma.organization.create({ data: { name: "فضای کاری من", slug: `org-${Date.now()}` } }));
 
     const contract = await prisma.contract.create({
-      data: { orgId: org.id, title, type, jurisdiction: "Iran", language: "fa", status: "draft" },
+      data: { orgId: org.id, ownerId: user.id, title, type, jurisdiction: "Iran", language: "fa", status: "draft" },
     });
 
     const version = await createVersion({
@@ -463,6 +465,101 @@ export async function logRejectionAction(contractId: string, summary: string) {
     why: "کاربر پیشنهاد هوش مصنوعی را رد کرد.",
   });
   revalidateContract(contractId);
+  return { ok: true as const };
+}
+
+// ───────────────────────────── Auth ──────────────────────────────────────────
+
+export async function signUpAction(input: { email: string; password: string; name?: string }) {
+  try {
+    await signUp(input);
+    return { ok: true as const };
+  } catch (err) {
+    return { ok: false as const, error: actionError(err) };
+  }
+}
+
+export async function signInAction(input: { email: string; password: string }) {
+  try {
+    await signIn(input);
+    return { ok: true as const };
+  } catch (err) {
+    return { ok: false as const, error: actionError(err) };
+  }
+}
+
+export async function signOutAction() {
+  await signOut();
+  return { ok: true as const };
+}
+
+// ───────────────────────── Per-user AI credentials ───────────────────────────
+
+const AI_PROVIDERS = ["openai", "anthropic", "azure", "google", "openai-compatible"] as const;
+
+/** Add a provider key for the current user (encrypted at rest) and activate it. */
+export async function addCredentialAction(input: {
+  label: string;
+  provider: string;
+  apiKey: string;
+  baseUrl?: string;
+  azureResource?: string;
+  model?: string;
+  modelFast?: string;
+}) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false as const, error: "ابتدا وارد حساب کاربری شوید." };
+    if (!(AI_PROVIDERS as readonly string[]).includes(input.provider)) {
+      return { ok: false as const, error: "ارائه‌دهنده نامعتبر است." };
+    }
+    if (!input.apiKey.trim()) return { ok: false as const, error: "کلید API را وارد کنید." };
+
+    const cred = await prisma.apiCredential.create({
+      data: {
+        userId: user.id,
+        label: input.label.trim().slice(0, 60) || "کلید من",
+        provider: input.provider,
+        apiKeyEnc: encryptSecret(input.apiKey.trim()),
+        baseUrl: input.baseUrl?.trim() || null,
+        azureResource: input.azureResource?.trim() || null,
+        model: input.model?.trim() || null,
+        modelFast: input.modelFast?.trim() || null,
+        isActive: true,
+      },
+    });
+    // Only one active credential at a time.
+    await prisma.apiCredential.updateMany({
+      where: { userId: user.id, id: { not: cred.id } },
+      data: { isActive: false },
+    });
+    revalidatePath("/settings");
+    return { ok: true as const, id: cred.id };
+  } catch (err) {
+    return { ok: false as const, error: actionError(err) };
+  }
+}
+
+/** Switch which credential is active (or pass null to fall back to mock/env). */
+export async function activateCredentialAction(credentialId: string | null) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "unauthorized" };
+  await prisma.apiCredential.updateMany({ where: { userId: user.id }, data: { isActive: false } });
+  if (credentialId) {
+    await prisma.apiCredential.updateMany({
+      where: { id: credentialId, userId: user.id },
+      data: { isActive: true },
+    });
+  }
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+export async function deleteCredentialAction(credentialId: string) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "unauthorized" };
+  await prisma.apiCredential.deleteMany({ where: { id: credentialId, userId: user.id } });
+  revalidatePath("/settings");
   return { ok: true as const };
 }
 

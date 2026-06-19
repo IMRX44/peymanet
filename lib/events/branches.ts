@@ -66,7 +66,8 @@ export async function mergeBranch(input: { contractId: string; branchId: string;
   const version = await commitEdit({
     contractId: input.contractId,
     parentVersionId: contract.headVersionId ?? ours.id,
-    newContentJson: theirs.contentJson,
+    // Keep JSON consistent with the merged text (was theirs.contentJson — stale).
+    newContentJson: JSON.stringify({ markdown: result.merged }),
     newContentText: result.merged,
     eventType: "merged",
     source: "human",

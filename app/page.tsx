@@ -3,13 +3,13 @@ import { getTranslations } from "next-intl/server";
 import { ShieldAlert, GitBranch, Handshake, ArrowLeft, Scale } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/shared/toggles";
-import { getContractIds } from "@/lib/db/queries";
+import { getCurrentUser } from "@/lib/auth";
 
 export default async function LandingPage() {
   const t = await getTranslations("landing");
   const tc = await getTranslations("common");
-  const ids = await getContractIds();
-  const demoHref = ids.length ? `/contracts/${ids[0]}/edit` : "/contracts";
+  const user = await getCurrentUser();
+  const demoHref = user ? "/contracts" : "/login";
 
   const features = [
     { icon: ShieldAlert, title: t("feature1Title"), desc: t("feature1Desc"), color: "text-risk-high" },

@@ -27,15 +27,49 @@ model Organization {
 }
 
 model User {
-  id        String          @id @default(cuid())
-  email     String          @unique
-  name      String?
-  role      String          @default("member") // owner | admin | member | viewer
-  avatarUrl String?
-  orgId     String?
-  org       Organization?   @relation(fields: [orgId], references: [id])
-  events    TimelineEvent[]
-  createdAt DateTime        @default(now())
+  id           String          @id @default(cuid())
+  email        String          @unique
+  name         String?
+  role         String          @default("member") // owner | admin | member | viewer
+  avatarUrl    String?
+  passwordHash String? // scrypt hash (salt:hash). Null for legacy/seed users.
+  orgId        String?
+  org          Organization?   @relation(fields: [orgId], references: [id])
+  events       TimelineEvent[]
+  sessions     Session[]
+  credentials  ApiCredential[]
+  contracts    Contract[]      @relation("ContractOwner")
+  createdAt    DateTime        @default(now())
+}
+
+// Opaque session tokens stored server-side; the cookie holds only the token.
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Per-user AI provider credentials. The API key is encrypted at rest (AES-256-GCM).
+model ApiCredential {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label         String   @default("کلید من")
+  provider      String // openai | anthropic | azure | google | openai-compatible
+  apiKeyEnc     String // encrypted secret (iv:tag:ciphertext, base64)
+  baseUrl       String? // for openai-compatible / custom gateways
+  azureResource String? // Azure resource name (provider = azure)
+  model         String? // deep model id (override)
+  modelFast     String? // fast model id (override)
+  isActive      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
 }
 
 // ───────────────────────────── Contracts & versions ───────────────────────────
@@ -44,6 +78,8 @@ model Contract {
   id           String   @id @default(cuid())
   orgId        String
   org          Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ownerId      String?
+  owner        User?    @relation("ContractOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   title        String
   type         String   // employment | sale | service | nda | lease | loan | partnership | other
   jurisdiction String?
@@ -63,6 +99,7 @@ model Contract {
   updatedAt DateTime @updatedAt
 
   @@index([orgId])
+  @@index([ownerId])
 }
 
 model ContractVersion {

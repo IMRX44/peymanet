@@ -1,15 +1,20 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
-import { Scale } from "lucide-react";
+import { Scale, Settings, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/shared/toggles";
 import { ContractsGrid } from "@/components/contracts/contracts-grid";
 import { listContracts } from "@/lib/db/queries";
+import { getCurrentUser } from "@/lib/auth";
+import { signOutAction } from "@/app/actions";
 
 export default async function ContractsPage() {
   const locale = await getLocale();
   const t = await getTranslations("contracts");
   const tc = await getTranslations("common");
-  const contracts = await listContracts(locale);
+  const user = await getCurrentUser();
+  if (!user) redirect("/login");
+  const contracts = await listContracts(locale, user.id);
 
   return (
     <main className="mesh-bg min-h-screen">
@@ -21,7 +26,30 @@ export default async function ContractsPage() {
           {tc("appName")}
         </Link>
         <div className="flex items-center gap-1">
+          <span className="me-1 hidden text-xs text-muted-foreground sm:inline">{user.name}</span>
+          <Link
+            href="/settings"
+            className="grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            title="کلیدهای هوش مصنوعی"
+          >
+            <Settings className="size-4" />
+          </Link>
           <ThemeToggle />
+          <form
+            action={async () => {
+              "use server";
+              await signOutAction();
+              redirect("/login");
+            }}
+          >
+            <button
+              type="submit"
+              className="grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              title="خروج"
+            >
+              <LogOut className="size-4" />
+            </button>
+          </form>
         </div>
       </header>
 
