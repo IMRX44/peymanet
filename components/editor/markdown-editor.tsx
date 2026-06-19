@@ -6,6 +6,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
 import { useTheme } from "next-themes";
 import { computeLineStatus, lineStatusField, setLineStatus } from "@/components/editor/change-tracking";
+import { liveMarkdown, liveMarkdownTheme } from "@/components/editor/live-markdown";
 
 export function MarkdownEditor({
   value,
@@ -52,6 +53,8 @@ export function MarkdownEditor({
     () => [
       markdown(),
       EditorView.lineWrapping,
+      liveMarkdown,
+      liveMarkdownTheme,
       lineStatusField,
       // Notion-like document surface: roomy, readable, no code-editor chrome.
       EditorView.theme({

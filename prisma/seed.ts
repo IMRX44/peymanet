@@ -7,6 +7,7 @@ import {
 import { createVersion, commitEdit } from "../lib/events/versions";
 import { createBranch } from "../lib/events/branches";
 import { recordEvent } from "../lib/events/events";
+import { hashPassword } from "../lib/crypto";
 
 const prisma = new PrismaClient();
 
@@ -104,7 +105,13 @@ async function main() {
   });
 
   const owner = await prisma.user.create({
-    data: { email: "demo@peymanet.app", name: "سارا رحیمی", role: "owner", orgId: org.id },
+    data: {
+      email: "demo@peymanet.app",
+      name: "سارا رحیمی",
+      role: "owner",
+      orgId: org.id,
+      passwordHash: hashPassword("demo1234"), // demo login: demo@peymanet.app / demo1234
+    },
   });
   const lawyer = await prisma.user.create({
     data: { email: "lawyer@peymanet.app", name: "علی محمدی", role: "admin", orgId: org.id },
@@ -114,6 +121,7 @@ async function main() {
   const contract = await prisma.contract.create({
     data: {
       orgId: org.id,
+      ownerId: owner.id,
       title: "قرارداد استخدام توسعه‌دهنده نرم‌افزار",
       type: "employment",
       jurisdiction: "Iran",

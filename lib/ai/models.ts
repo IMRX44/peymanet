@@ -15,6 +15,10 @@ export const MODELS = {
 const PRICE: Record<string, { in: number; out: number }> = {
   "gpt-4o": { in: 0.0025, out: 0.01 },
   "gpt-4o-mini": { in: 0.00015, out: 0.0006 },
+  "claude-3-5-sonnet-latest": { in: 0.003, out: 0.015 },
+  "claude-3-5-haiku-latest": { in: 0.0008, out: 0.004 },
+  "gemini-1.5-pro": { in: 0.00125, out: 0.005 },
+  "gemini-1.5-flash": { in: 0.000075, out: 0.0003 },
 };
 
 export function estimateCost(model: string, promptTokens: number, completionTokens: number): number {

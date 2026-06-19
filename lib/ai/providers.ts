@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { aiMode, MODELS, estimateCost } from "@/lib/ai/models";
+import { estimateCost } from "@/lib/ai/models";
+import { resolveAi } from "@/lib/ai/resolve";
 import { cacheKey, getCached, setCached } from "@/lib/ai/cache";
 import { prisma } from "@/lib/db/prisma";
 import {
@@ -58,7 +59,7 @@ async function logCall(
  */
 async function runObject<T>(opts: {
   task: string;
-  model: string;
+  tier: "deep" | "fast";
   system: string;
   prompt: string;
   schema: z.ZodType<T>;
@@ -66,12 +67,14 @@ async function runObject<T>(opts: {
   mock: () => T;
   contractId?: string;
 }): Promise<T> {
-  const key = cacheKey(opts.task, opts.model, opts.cacheInput);
+  const ai = await resolveAi();
+  const model = opts.tier === "deep" ? ai.deep : ai.fast;
+  const key = cacheKey(opts.task, model, opts.cacheInput);
   const cached = await getCached<T>(key);
   if (cached) return cached;
 
   let value: T;
-  if (aiMode() === "mock") {
+  if (ai.mode === "mock") {
     value = opts.mock();
   } else {
     const started = Date.now();
@@ -80,7 +83,7 @@ async function runObject<T>(opts: {
     const { generateObject } = await import("ai");
     try {
       const result = await generateObject({
-        model: await getLanguageModel(opts.model),
+        model: await getLanguageModel(ai, model),
         schema: opts.schema as z.ZodType<T>,
         system: opts.system,
         prompt: opts.prompt,
@@ -88,7 +91,7 @@ async function runObject<T>(opts: {
       const usage = (result as { usage?: { promptTokens?: number; completionTokens?: number } }).usage;
       await logCall(
         opts.task,
-        opts.model,
+        model,
         usage?.promptTokens ?? 0,
         usage?.completionTokens ?? 0,
         Date.now() - started,
@@ -97,12 +100,12 @@ async function runObject<T>(opts: {
       );
       value = result.object as T;
     } catch (err) {
-      await logCall(opts.task, opts.model, 0, 0, Date.now() - started, false, opts.contractId);
+      await logCall(opts.task, model, 0, 0, Date.now() - started, false, opts.contractId);
       throw err;
     }
   }
 
-  await setCached(key, opts.task, opts.model, value);
+  await setCached(key, opts.task, model, value);
   return value;
 }
 
@@ -111,7 +114,7 @@ async function runObject<T>(opts: {
 export async function segmentContract(text: string): Promise<SegmentationResult> {
   return runObject({
     task: "segment",
-    model: MODELS.fast,
+    tier: "fast",
     system: P.segmentationSystemPrompt(),
     prompt: P.segmentationUserPrompt(text),
     schema: SegmentationResult,
@@ -131,7 +134,7 @@ export async function analyzeClauseRisk(args: {
 }): Promise<RiskAssessmentResult> {
   return runObject({
     task: "risk",
-    model: MODELS.deep,
+    tier: "deep",
     system: P.riskSystemPrompt(args.contractType, args.jurisdiction, args.language),
     prompt: P.riskUserPrompt(args.index, args.title, args.text),
     schema: RiskAssessmentResult,
@@ -150,7 +153,7 @@ export async function summarizeDocument(args: {
 }): Promise<DocSummaryResult> {
   return runObject({
     task: "docSummary",
-    model: MODELS.deep,
+    tier: "deep",
     system: P.docSummarySystemPrompt(args.contractType, args.jurisdiction),
     prompt: P.docSummaryUserPrompt(args.clauses),
     schema: DocSummaryResult,
@@ -184,7 +187,7 @@ export async function generateNegotiationReport(args: {
 
   return runObject({
     task: "negotiation",
-    model: MODELS.deep,
+    tier: "deep",
     system: P.negotiationSystemPrompt(args.perspective, counterparty, args.contractType, args.jurisdiction),
     prompt: P.negotiationUserPrompt(args.clauses, risks),
     schema: NegotiationReportResult,
@@ -208,7 +211,7 @@ export async function assistantReply(args: {
   const history = (args.history ?? []).slice(-6);
   const raw = await runObject({
     task: "assistant",
-    model: MODELS.deep,
+    tier: "deep",
     system: P.assistantSystemPrompt(args.contractType, args.jurisdiction, args.language),
     prompt: P.assistantUserPrompt(args.document, args.message, history),
     schema: AssistantResponseLlm,
@@ -229,7 +232,7 @@ export async function checkPolicyCompliance(args: {
 }): Promise<PolicyComplianceResult> {
   return runObject({
     task: "policy",
-    model: MODELS.deep,
+    tier: "deep",
     system: P.policySystemPrompt(args.contractType, args.jurisdiction),
     prompt: P.policyUserPrompt(args.document, args.policies),
     schema: PolicyComplianceResult,
@@ -253,7 +256,8 @@ export async function wargameReply(args: {
         ? PERSPECTIVE_LABELS[pair[0]].en
         : "counterparty";
 
-  if (aiMode() === "mock") {
+  const ai = await resolveAi();
+  if (ai.mode === "mock") {
     return mockWargameReply(args.history, args.perspective);
   }
 
@@ -262,15 +266,15 @@ export async function wargameReply(args: {
   const { generateText } = await import("ai");
   try {
     const result = await generateText({
-      model: await getLanguageModel(MODELS.deep),
+      model: await getLanguageModel(ai, ai.deep),
       system: P.wargameSystemPrompt(args.perspective, counterparty),
       messages: args.history,
     });
     const usage = (result as { usage?: { promptTokens?: number; completionTokens?: number } }).usage;
-    await logCall("wargame", MODELS.deep, usage?.promptTokens ?? 0, usage?.completionTokens ?? 0, Date.now() - started, true);
+    await logCall("wargame", ai.deep, usage?.promptTokens ?? 0, usage?.completionTokens ?? 0, Date.now() - started, true);
     return result.text;
   } catch (err) {
-    await logCall("wargame", MODELS.deep, 0, 0, Date.now() - started, false);
+    await logCall("wargame", ai.deep, 0, 0, Date.now() - started, false);
     throw err;
   }
 }

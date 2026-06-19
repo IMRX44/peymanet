@@ -75,8 +75,10 @@ export function DocumentAssistant({
   const active = chats.find((c) => c.id === activeId) ?? chats[0];
   const messages = active.messages;
 
-  const patchActive = (fn: (c: Chat) => Chat) =>
-    setChats((all) => all.map((c) => (c.id === activeId ? fn(c) : c)));
+  // Patch a specific chat by id so async replies always land in the right chat,
+  // even if the user switched chats while a request was in flight.
+  const patchChat = (chatId: string, fn: (c: Chat) => Chat) =>
+    setChats((all) => all.map((c) => (c.id === chatId ? fn(c) : c)));
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
@@ -89,10 +91,11 @@ export function DocumentAssistant({
     setInput("");
   };
 
-  const runAssistant = async (q: string) => {
+  // `priorHistory` is the ordered transcript BEFORE this turn's question, so the
+  // model receives messages in the correct chronological order (oldest→newest).
+  const runAssistant = async (chatId: string, q: string, priorHistory: { role: "user" | "assistant"; content: string }[]) => {
     try {
-      // Send up to the last 6 messages as conversation memory.
-      const history = active.messages.slice(-6).map((m) => ({ role: m.role, content: m.text }));
+      const history = priorHistory.slice(-6);
       const res = await assistantAction({ contractId, document, message: q, history });
       if (!res.ok) {
         toast.error(res.error ?? "درخواست دستیار ناموفق بود");
@@ -121,7 +124,7 @@ export function DocumentAssistant({
           msg.resolved = "accepted";
         } else msg.proposal = proposal;
       }
-      patchActive((c) => ({ ...c, messages: [...c.messages, msg], costUsd: c.costUsd + (res.costUsd ?? 0) }));
+      patchChat(chatId, (c) => ({ ...c, messages: [...c.messages, msg], costUsd: c.costUsd + (res.costUsd ?? 0) }));
       autoApply?.();
     } catch {
       toast.error("درخواست دستیار ناموفق بود");
@@ -131,14 +134,17 @@ export function DocumentAssistant({
   const send = (text: string) => {
     const q = text.trim();
     if (!q || pending) return;
-    patchActive((c) => ({
+    const chatId = active.id;
+    // Snapshot the prior transcript in order, then append the user's question.
+    const priorHistory = active.messages.map((m) => ({ role: m.role, content: m.text }));
+    patchChat(chatId, (c) => ({
       ...c,
       title: c.messages.length === 0 ? q.slice(0, 40) : c.title,
       messages: [...c.messages, { role: "user", text: q }],
     }));
     setInput("");
     start(() => {
-      void runAssistant(q);
+      void runAssistant(chatId, q, priorHistory);
     });
   };
 
@@ -154,7 +160,7 @@ export function DocumentAssistant({
       toast("پیشنهاد رد شد");
     }
 
-    patchActive((c) => {
+    patchChat(activeId, (c) => {
       const next = [...c.messages];
       if (!next[idx]?.proposal) return c;
       next[idx] = { ...next[idx], resolved: accept ? "accepted" : "rejected" };

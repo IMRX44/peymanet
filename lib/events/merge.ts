@@ -49,8 +49,10 @@ export function threeWayMerge(base: string, ours: string, theirs: string): Merge
 
     if (ourChanged && theirChanged && op !== tp) {
       conflicts.push({ index: i, base: bp, ours: op, theirs: tp });
-      // Keep "ours" by default in the merged body; UI resolves conflicts.
-      out.push(op || tp);
+      // Keep "ours" by default in the merged body (incl. a deletion = empty);
+      // UI resolves conflicts. A sentinel keeps a deleted paragraph from being
+      // silently replaced by theirs via the empty-paragraph filter below.
+      out.push(op);
     } else if (theirChanged) {
       out.push(tp);
     } else if (ourChanged) {
