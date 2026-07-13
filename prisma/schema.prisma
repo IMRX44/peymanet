@@ -30,7 +30,10 @@ model User {
   id           String          @id @default(cuid())
   email        String          @unique
   name         String?
-  role         String          @default("member") // owner | admin | member | viewer
+  role         String          @default("member") // admin | member (owner/viewer legacy)
+  // New sign-ups start unapproved; an admin must approve them before they can
+  // use the app. Admins are always treated as approved (see lib/auth.ts).
+  approved     Boolean         @default(false)
   avatarUrl    String?
   passwordHash String? // scrypt hash (salt:hash). Null for legacy/seed users.
   orgId        String?
@@ -334,7 +337,8 @@ model NegotiationSession {
 model AiCall {
   id               String   @id @default(cuid())
   contractId       String?
-  task             String // segment | risk | docSummary | negotiation | wargame
+  userId           String? // who triggered the call — powers the admin per-user cost view
+  task             String // segment | risk | docSummary | negotiation | wargame | assistant | policy
   model            String
   promptTokens     Int      @default(0)
   completionTokens Int      @default(0)
@@ -344,6 +348,7 @@ model AiCall {
   createdAt        DateTime @default(now())
 
   @@index([createdAt])
+  @@index([userId])
 }
 
 model AiCache {

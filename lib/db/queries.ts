@@ -111,6 +111,7 @@ export async function listContracts(locale: string, ownerId?: string) {
     orderBy: { updatedAt: "desc" },
     include: {
       analysisRuns: { orderBy: { createdAt: "desc" }, take: 1 },
+      owner: { select: { name: true, email: true } },
       _count: { select: { versions: true } },
     },
   });
@@ -121,7 +122,77 @@ export async function listContracts(locale: string, ownerId?: string) {
     status: c.status,
     overallRisk: c.analysisRuns[0]?.overallRisk ?? null,
     updatedAt: c.updatedAt.toISOString(),
+    ownerName: c.owner?.name ?? c.owner?.email ?? null,
   }));
+}
+
+// ───────────────────────────── Admin views ──────────────────────────────
+
+export type AdminUserRow = {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  approved: boolean;
+  createdAt: string;
+  contractsCount: number;
+};
+
+export type AdminCostRow = {
+  userId: string | null;
+  name: string | null;
+  email: string | null;
+  calls: number;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+};
+
+/** All users, newest first, with their contract counts — for the admin panel. */
+export async function listUsersForAdmin(): Promise<AdminUserRow[]> {
+  const users = await prisma.user.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { _count: { select: { contracts: true } } },
+  });
+  return users.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    approved: u.approved,
+    createdAt: u.createdAt.toISOString(),
+    contractsCount: u._count.contracts,
+  }));
+}
+
+/** AI spend + usage grouped by user (nulls = system/unattributed), highest cost first. */
+export async function costByUser(): Promise<AdminCostRow[]> {
+  const grouped = await prisma.aiCall.groupBy({
+    by: ["userId"],
+    _sum: { costUsd: true, promptTokens: true, completionTokens: true },
+    _count: { _all: true },
+  });
+
+  const ids = grouped.map((g) => g.userId).filter((id): id is string => !!id);
+  const users = ids.length
+    ? await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, email: true } })
+    : [];
+  const byId = new Map(users.map((u) => [u.id, u]));
+
+  return grouped
+    .map((g) => {
+      const u = g.userId ? byId.get(g.userId) : undefined;
+      return {
+        userId: g.userId,
+        name: u?.name ?? null,
+        email: u?.email ?? null,
+        calls: g._count._all,
+        promptTokens: g._sum.promptTokens ?? 0,
+        completionTokens: g._sum.completionTokens ?? 0,
+        costUsd: g._sum.costUsd ?? 0,
+      };
+    })
+    .sort((a, b) => b.costUsd - a.costUsd || b.calls - a.calls);
 }
 
 export async function getWorkspace(contractId: string, locale: string, ownerId?: string): Promise<WorkspaceData | null> {

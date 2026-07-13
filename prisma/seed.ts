@@ -8,6 +8,7 @@ import { createVersion, commitEdit } from "../lib/events/versions";
 import { createBranch } from "../lib/events/branches";
 import { recordEvent } from "../lib/events/events";
 import { hashPassword } from "../lib/crypto";
+import { estimateCost } from "../lib/ai/models";
 
 const prisma = new PrismaClient();
 
@@ -104,17 +105,38 @@ async function main() {
     data: { name: "دفتر حقوقی پیمانت", slug: "peymanet" },
   });
 
+  // Admin (demo login): sees every contract + the per-user cost view + approves users.
   const owner = await prisma.user.create({
     data: {
       email: "demo@peymanet.app",
       name: "سارا رحیمی",
-      role: "owner",
+      role: "admin",
+      approved: true,
       orgId: org.id,
-      passwordHash: hashPassword("demo1234"), // demo login: demo@peymanet.app / demo1234
+      passwordHash: hashPassword("demo1234"), // demo admin login: demo@peymanet.app / demo1234
     },
   });
+  // Approved member: owns their own contract and can only see it.
   const lawyer = await prisma.user.create({
-    data: { email: "lawyer@peymanet.app", name: "علی محمدی", role: "admin", orgId: org.id },
+    data: {
+      email: "lawyer@peymanet.app",
+      name: "علی محمدی",
+      role: "member",
+      approved: true,
+      orgId: org.id,
+      passwordHash: hashPassword("lawyer1234"), // member login: lawyer@peymanet.app / lawyer1234
+    },
+  });
+  // Pending member: awaits admin approval (shown in the admin panel queue).
+  await prisma.user.create({
+    data: {
+      email: "reza@peymanet.app",
+      name: "رضا کریمی",
+      role: "member",
+      approved: false,
+      orgId: org.id,
+      passwordHash: hashPassword("reza1234"), // pending login: reza@peymanet.app / reza1234
+    },
   });
 
   // Contract + initial version.
@@ -314,7 +336,94 @@ async function main() {
     });
   }
 
+  // ── A second contract owned by the member (so an admin sees >1 owner) ──
+  const MEMBER_CLAUSES = [
+    { title: "ماده ۱ - موضوع قرارداد", type: "subject", text: "موضوع این قرارداد ارائهٔ خدمات مشاورهٔ نرم‌افزاری توسط مشاور به کارفرما است." },
+    { title: "ماده ۲ - حق‌الزحمه", type: "payment", text: "حق‌الزحمه به‌صورت ماهیانه و ظرف پانزده روز از تاریخ صورت‌حساب پرداخت می‌شود." },
+    { title: "ماده ۳ - محرمانگی", type: "privacy", text: "طرفین متعهد به حفظ اطلاعات محرمانهٔ یکدیگر به‌صورت دوطرفه و تا سه سال پس از خاتمه قرارداد هستند." },
+  ];
+  const memberBuild = buildContent(MEMBER_CLAUSES);
+  const memberContract = await prisma.contract.create({
+    data: {
+      orgId: org.id,
+      ownerId: lawyer.id,
+      title: "قرارداد خدمات مشاوره نرم‌افزاری",
+      type: "service",
+      jurisdiction: "Iran",
+      language: "fa",
+      status: "draft",
+    },
+  });
+  const mv1 = await createVersion({
+    contractId: memberContract.id,
+    contentJson: memberBuild.contentJson,
+    contentText: memberBuild.contentText,
+    source: "human",
+    authorId: lawyer.id,
+    message: "پیش‌نویس اولیه قرارداد",
+  });
+  for (const b of memberBuild.blocks) {
+    await prisma.clause.create({
+      data: { versionId: mv1.id, index: b.index, title: b.title, type: b.type, text: b.text, startOffset: b.startOffset, endOffset: b.endOffset },
+    });
+  }
+  await recordEvent({
+    contractId: memberContract.id,
+    type: "created",
+    source: "human",
+    actorId: lawyer.id,
+    summary: "قرارداد ایجاد شد",
+    why: "بارگذاری پیش‌نویس اولیه.",
+    versionId: mv1.id,
+  });
+
+  // ── Seed per-user AI usage so the admin cost view is populated on first load ──
+  // (Represents prior live-model usage; mock-mode runs would log $0.)
+  const usageSeed: { user: typeof owner; contractId: string; rows: [string, string, number, number][] }[] = [
+    {
+      user: owner,
+      contractId: contract.id,
+      rows: [
+        // task, model, promptTokens, completionTokens
+        ["risk", "gpt-4o", 1200, 640],
+        ["risk", "gpt-4o", 1100, 590],
+        ["docSummary", "gpt-4o", 2400, 820],
+        ["negotiation", "gpt-4o", 2600, 1500],
+        ["assistant", "gpt-4o", 1800, 500],
+        ["segment", "gpt-4o-mini", 1600, 300],
+      ],
+    },
+    {
+      user: lawyer,
+      contractId: memberContract.id,
+      rows: [
+        ["risk", "gpt-4o", 800, 420],
+        ["assistant", "gpt-4o", 1400, 360],
+        ["segment", "gpt-4o-mini", 900, 180],
+      ],
+    },
+  ];
+  for (const u of usageSeed) {
+    for (const [task, model, pt, ct] of u.rows) {
+      await prisma.aiCall.create({
+        data: {
+          contractId: u.contractId,
+          userId: u.user.id,
+          task,
+          model,
+          promptTokens: pt,
+          completionTokens: ct,
+          costUsd: estimateCost(model, pt, ct),
+          latencyMs: 400 + Math.floor(Math.random() * 1200),
+          ok: true,
+        },
+      });
+    }
+  }
+
   console.log(`✅ Seeded contract ${contract.id} with ${clauseRows.length} clauses, 1 analysis run, 1 branch, 1 negotiation report.`);
+  console.log(`   + member contract ${memberContract.id} (owner: lawyer@peymanet.app) and per-user AI cost rows.`);
+  console.log(`   Logins — admin: demo@peymanet.app/demo1234 · member: lawyer@peymanet.app/lawyer1234 · pending: reza@peymanet.app/reza1234`);
   console.log(`   Open: /contracts/${contract.id}`);
 }
 

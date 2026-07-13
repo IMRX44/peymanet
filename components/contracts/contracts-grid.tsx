@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileText, ArrowLeft, Plus, Trash2, Loader2 } from "lucide-react";
+import { FileText, ArrowLeft, Plus, Trash2, Loader2, User } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,9 +24,10 @@ type ContractRow = {
   status: string;
   overallRisk: number | null;
   updatedAt: string;
+  ownerName?: string | null;
 };
 
-export function ContractsGrid({ contracts }: { contracts: ContractRow[] }) {
+export function ContractsGrid({ contracts, showOwner = false }: { contracts: ContractRow[]; showOwner?: boolean }) {
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -93,9 +94,15 @@ export function ContractsGrid({ contracts }: { contracts: ContractRow[] }) {
                     </span>
                     <div>
                       <h3 className="font-semibold leading-snug group-hover:text-primary">{c.title}</h3>
-                      <div className="mt-1.5 flex items-center gap-2">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
                         <Badge variant="muted">{CONTRACT_TYPE_LABELS[c.type as ContractType]?.fa ?? c.type}</Badge>
                         <span className="text-xs text-muted-foreground">{statusLabel(c.status)}</span>
+                        {showOwner && c.ownerName && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                            <User className="size-2.5" />
+                            {c.ownerName}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>

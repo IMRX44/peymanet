@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { analyzeClauseRisk, summarizeDocument } from "@/lib/ai/providers";
 import { recordEvent } from "@/lib/events/events";
 import { resolveAi } from "@/lib/ai/resolve";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isAdmin, isApproved } from "@/lib/auth";
 import type { ContractType } from "@/lib/ai/schemas";
 
 export const runtime = "nodejs";
@@ -17,15 +17,16 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  // Require an authenticated user who owns this contract.
+  // Require an authenticated, approved user who owns this contract (or an admin).
   const user = await getCurrentUser();
   if (!user) return new Response("unauthorized", { status: 401 });
+  if (!isApproved(user)) return new Response("forbidden", { status: 403 });
 
   const contract = await prisma.contract.findUnique({ where: { id } });
   if (!contract?.headVersionId) {
     return new Response("contract or head version not found", { status: 404 });
   }
-  if (contract.ownerId && contract.ownerId !== user.id) {
+  if (!isAdmin(user) && contract.ownerId && contract.ownerId !== user.id) {
     return new Response("forbidden", { status: 403 });
   }
   const versionId = contract.headVersionId;

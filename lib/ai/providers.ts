@@ -34,11 +34,13 @@ async function logCall(
   latencyMs: number,
   ok: boolean,
   contractId?: string,
+  userId?: string,
 ) {
   try {
     await prisma.aiCall.create({
       data: {
         contractId,
+        userId,
         task,
         model,
         promptTokens,
@@ -51,6 +53,11 @@ async function logCall(
   } catch {
     // observability is best-effort
   }
+}
+
+/** Rough token estimate (~4 chars/token) for logging mock-mode usage. */
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
 }
 
 /**
@@ -75,7 +82,20 @@ async function runObject<T>(opts: {
 
   let value: T;
   if (ai.mode === "mock") {
+    // Log mock runs too (cost is $0 for the "mock" model) so the admin per-user
+    // usage view is populated even without a live key.
+    const started = Date.now();
     value = opts.mock();
+    await logCall(
+      opts.task,
+      model,
+      estimateTokens(opts.system + opts.prompt),
+      estimateTokens(JSON.stringify(value)),
+      Date.now() - started,
+      true,
+      opts.contractId,
+      ai.userId,
+    );
   } else {
     const started = Date.now();
     // Lazy import so the AI SDK is only loaded in live mode.
@@ -97,10 +117,11 @@ async function runObject<T>(opts: {
         Date.now() - started,
         true,
         opts.contractId,
+        ai.userId,
       );
       value = result.object as T;
     } catch (err) {
-      await logCall(opts.task, model, 0, 0, Date.now() - started, false, opts.contractId);
+      await logCall(opts.task, model, 0, 0, Date.now() - started, false, opts.contractId, ai.userId);
       throw err;
     }
   }
@@ -258,7 +279,19 @@ export async function wargameReply(args: {
 
   const ai = await resolveAi();
   if (ai.mode === "mock") {
-    return mockWargameReply(args.history, args.perspective);
+    const started = Date.now();
+    const reply = mockWargameReply(args.history, args.perspective);
+    await logCall(
+      "wargame",
+      ai.deep,
+      estimateTokens(args.history.map((m) => m.content).join(" ")),
+      estimateTokens(reply),
+      Date.now() - started,
+      true,
+      undefined,
+      ai.userId,
+    );
+    return reply;
   }
 
   const started = Date.now();
@@ -271,10 +304,10 @@ export async function wargameReply(args: {
       messages: args.history,
     });
     const usage = (result as { usage?: { promptTokens?: number; completionTokens?: number } }).usage;
-    await logCall("wargame", ai.deep, usage?.promptTokens ?? 0, usage?.completionTokens ?? 0, Date.now() - started, true);
+    await logCall("wargame", ai.deep, usage?.promptTokens ?? 0, usage?.completionTokens ?? 0, Date.now() - started, true, undefined, ai.userId);
     return result.text;
   } catch (err) {
-    await logCall("wargame", ai.deep, 0, 0, Date.now() - started, false);
+    await logCall("wargame", ai.deep, 0, 0, Date.now() - started, false, undefined, ai.userId);
     throw err;
   }
 }

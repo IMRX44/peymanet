@@ -6,6 +6,31 @@ import { hashPassword, verifyPassword } from "@/lib/crypto";
 export const SESSION_COOKIE = "peymanet_session";
 const SESSION_DAYS = 30;
 
+/** Minimal user shape the role/approval helpers need. */
+type AuthUser = { role: string; approved?: boolean } | null | undefined;
+
+/** Global admin: sees every contract, the per-user cost view, and approves users. */
+export function isAdmin(user: AuthUser): boolean {
+  return user?.role === "admin";
+}
+
+/**
+ * Whether a user may use the app. New sign-ups are unapproved until an admin
+ * approves them; admins are always considered approved (so a schema change can
+ * never lock the admin out).
+ */
+export function isApproved(user: AuthUser): boolean {
+  return !!user && (user.approved === true || user.role === "admin");
+}
+
+/** Emails that are auto-promoted to an approved admin on sign-up (comma-separated). */
+function adminAllowlist(): string[] {
+  return (process.env.ADMIN_EMAILS ?? "")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 /**
  * Real session auth (cookie → Session row → User). Replaces the previous demo
  * stub. Passwords are scrypt-hashed; sessions are opaque random tokens stored
@@ -52,6 +77,12 @@ export async function signUp(input: { email: string; password: string; name?: st
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) throw new Error("این ایمیل قبلاً ثبت شده است.");
 
+  // Bootstrap: the very first account (empty DB) — or any email in ADMIN_EMAILS —
+  // becomes an approved admin. Everyone else registers as an unapproved member
+  // and must be approved by an admin before they can use the app.
+  const userCount = await prisma.user.count();
+  const isBootstrapAdmin = userCount === 0 || adminAllowlist().includes(email);
+
   // Each new user gets their own private org (single-tenant per user).
   const org = await prisma.organization.create({
     data: { name: input.name ? `فضای کاری ${input.name}` : "فضای کاری من", slug: `org-${randomBytes(6).toString("hex")}` },
@@ -60,7 +91,8 @@ export async function signUp(input: { email: string; password: string; name?: st
     data: {
       email,
       name: input.name?.trim() || email.split("@")[0],
-      role: "owner",
+      role: isBootstrapAdmin ? "admin" : "member",
+      approved: isBootstrapAdmin,
       orgId: org.id,
       passwordHash: hashPassword(input.password),
     },

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db/prisma";
-import { getCurrentUser, signIn, signUp, signOut } from "@/lib/auth";
+import { getCurrentUser, signIn, signUp, signOut, isAdmin, isApproved } from "@/lib/auth";
 import { encryptSecret } from "@/lib/crypto";
 import { recordEvent } from "@/lib/events/events";
 import { restoreVersion, commitEdit } from "@/lib/events/versions";
@@ -396,6 +396,7 @@ export async function createContractAction(args: { title: string; type: string; 
   try {
     const user = await getCurrentUser();
     if (!user) return { ok: false as const, error: "ابتدا وارد حساب کاربری شوید." };
+    if (!isApproved(user)) return { ok: false as const, error: "حساب شما هنوز توسط مدیر تأیید نشده است." };
 
     const title = args.title.trim().slice(0, 200);
     if (!title) return { ok: false as const, error: "title required" };
@@ -472,8 +473,9 @@ export async function logRejectionAction(contractId: string, summary: string) {
 
 export async function signUpAction(input: { email: string; password: string; name?: string }) {
   try {
-    await signUp(input);
-    return { ok: true as const };
+    const user = await signUp(input);
+    // Tell the client whether to land on the app or the "pending approval" page.
+    return { ok: true as const, approved: isApproved(user) };
   } catch (err) {
     return { ok: false as const, error: actionError(err) };
   }
@@ -560,6 +562,40 @@ export async function deleteCredentialAction(credentialId: string) {
   if (!user) return { ok: false as const, error: "unauthorized" };
   await prisma.apiCredential.deleteMany({ where: { id: credentialId, userId: user.id } });
   revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+// ───────────────────────────── Admin (user management) ───────────────────────
+
+/** Guard: resolve the current user and ensure they are a global admin. */
+async function requireAdmin() {
+  const user = await getCurrentUser();
+  if (!user || !isAdmin(user)) return null;
+  return user;
+}
+
+/** Approve or revoke a user's access to the app (admin only). */
+export async function setUserApprovedAction(userId: string, approved: boolean) {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false as const, error: "دسترسی مدیر لازم است." };
+  await prisma.user.update({ where: { id: userId }, data: { approved } });
+  revalidatePath("/admin");
+  return { ok: true as const };
+}
+
+/** Promote a user to admin, or demote back to an approved member (admin only). */
+export async function setUserRoleAction(userId: string, makeAdmin: boolean) {
+  const admin = await requireAdmin();
+  if (!admin) return { ok: false as const, error: "دسترسی مدیر لازم است." };
+  if (userId === admin.id && !makeAdmin) {
+    return { ok: false as const, error: "نمی‌توانید نقش مدیریتی خود را حذف کنید." };
+  }
+  await prisma.user.update({
+    where: { id: userId },
+    // Promoting also approves; a member keeps their approved state on demotion.
+    data: makeAdmin ? { role: "admin", approved: true } : { role: "member" },
+  });
+  revalidatePath("/admin");
   return { ok: true as const };
 }
 

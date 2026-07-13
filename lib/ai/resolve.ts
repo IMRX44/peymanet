@@ -15,6 +15,8 @@ export type ResolvedAi = {
   /** model id for fast tasks (segmentation). */
   fast: string;
   label: string;
+  /** Signed-in user this request belongs to — used to attribute AI cost. */
+  userId?: string;
 };
 
 /** Sensible default model ids per provider. */
@@ -39,10 +41,14 @@ const MOCK: ResolvedAi = { mode: "mock", provider: "openai", deep: "mock", fast:
  * user's active credential, then env vars, then deterministic mock.
  */
 export async function resolveAi(): Promise<ResolvedAi> {
+  // Resolve the caller once so every branch can attribute AI cost to them.
+  let userId: string | undefined;
+
   // 1) Per-user credential (their own purchased key).
   try {
     const user = await getCurrentUser();
     if (user) {
+      userId = user.id;
       const cred = await prisma.apiCredential.findFirst({
         where: { userId: user.id, isActive: true },
         orderBy: { createdAt: "desc" },
@@ -61,6 +67,7 @@ export async function resolveAi(): Promise<ResolvedAi> {
             deep: cred.model || def.deep,
             fast: cred.modelFast || cred.model || def.fast,
             label: `${cred.label} · ${provider}`,
+            userId,
           };
         }
       }
@@ -83,9 +90,10 @@ export async function resolveAi(): Promise<ResolvedAi> {
       deep: process.env.OPENAI_MODEL || def.deep,
       fast: process.env.OPENAI_MODEL_FAST || def.fast,
       label: process.env.OPENAI_BASE_URL ? `openai-compatible` : provider,
+      userId,
     };
   }
 
   // 3) Mock.
-  return MOCK;
+  return { ...MOCK, userId };
 }

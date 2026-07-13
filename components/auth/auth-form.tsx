@@ -28,8 +28,16 @@ export function AuthForm() {
         toast.error(res.error ?? "خطایی رخ داد");
         return;
       }
-      toast.success(mode === "signup" ? "حساب ساخته شد ✨" : "خوش آمدید!");
-      router.replace("/contracts");
+      // New members await admin approval; send them to the pending page.
+      const pending = mode === "signup" && "approved" in res && res.approved === false;
+      toast.success(
+        mode === "signup"
+          ? pending
+            ? "حساب ساخته شد؛ در انتظار تأیید مدیر"
+            : "حساب ساخته شد ✨"
+          : "خوش آمدید!",
+      );
+      router.replace(pending ? "/pending" : "/contracts");
       router.refresh();
     });
   };

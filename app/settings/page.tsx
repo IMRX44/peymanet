@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Scale, ArrowRight } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isApproved } from "@/lib/auth";
 import { prisma } from "@/lib/db/prisma";
 import { ThemeToggle } from "@/components/shared/toggles";
 import { ApiKeys } from "@/components/settings/api-keys";
@@ -9,6 +9,7 @@ import { ApiKeys } from "@/components/settings/api-keys";
 export default async function SettingsPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  if (!isApproved(user)) redirect("/pending");
 
   const creds = await prisma.apiCredential.findMany({
     where: { userId: user.id },
