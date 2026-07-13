@@ -1,6 +1,7 @@
 # Peymanet - LegalAI
 # Single-stage image. Runs out of the box in MOCK mode (no API key) on SQLite.
-# OpenAI / custom endpoint / Azure: pass env vars at runtime (see README).
+# To go live, pass provider env vars at runtime — OpenAI, any OpenAI-compatible
+# endpoint, Azure OpenAI, Google Gemini, or Anthropic Claude (see README).
 
 FROM node:22-slim
 WORKDIR /app

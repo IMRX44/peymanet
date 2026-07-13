@@ -11,7 +11,7 @@
 ![React](https://img.shields.io/badge/React-19-149ECA?logo=react)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
 ![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma)
-![OpenAI](https://img.shields.io/badge/AI-OpenAI%20%7C%20mock-412991?logo=openai)
+![AI](https://img.shields.io/badge/AI-OpenAI%20%C2%B7%20Gemini%20%C2%B7%20Claude%20%C2%B7%20Azure%20%7C%20mock-412991?logo=openai)
 ![Tailwind](https://img.shields.io/badge/Tailwind-3-38BDF8?logo=tailwindcss)
 ![RTL](https://img.shields.io/badge/RTL-first-22c55e)
 
@@ -27,7 +27,7 @@
 
 **English:** Peymanet is a **Next.js** LegalAI platform that analyzes a contract clause‑by‑clause, paints risk directly onto the text, manages change history like Git, guides negotiation like a lawyer at your side, and ships a **markdown editor with an AI assistant** for drafting and revising. Fully **bilingual (Persian/English, RTL‑first)**.
 
-> 🟢 **Runs with NO API key.** Ships with a deterministic, contextual, bilingual **mock AI** so the entire product is demoable offline. Set `AI_MODE=openai` to use the real OpenAI engine — same code path.
+> 🟢 **Runs with NO API key.** Ships with a deterministic, contextual, bilingual **mock AI** so the entire product is demoable offline. Flip `AI_MODE=live` to use a real engine — **OpenAI, any OpenAI‑compatible endpoint, Azure OpenAI, Google Gemini, or Anthropic Claude** — through the exact same code path.
 
 ---
 
@@ -43,10 +43,11 @@ docker compose up --build
 این کانتینر به‌صورت خودکار schema را می‌سازد، یک قرارداد نمونه seed می‌کند و اپ را اجرا می‌کند (حالت mock، بدون نیاز به کلید).
 The container auto‑creates the schema, seeds a sample contract, and serves the app (mock mode, no key needed).
 
-برای OpenAI، یک فایل `.env` کنار `docker-compose.yml` بسازید · For OpenAI, create a `.env` next to `docker-compose.yml`:
+برای موتور واقعی، یک فایل `.env` کنار `docker-compose.yml` بسازید · For a live engine, create a `.env` next to `docker-compose.yml`:
 
 ```env
-AI_MODE=openai
+AI_MODE=live
+AI_PROVIDER=openai        # or: openai-compatible | azure | google | anthropic
 OPENAI_API_KEY=sk-...
 ```
 
@@ -64,38 +65,86 @@ npm run dev                 # → http://localhost:3000
 
 ---
 
-## 🧠 حالت‌های هوش مصنوعی · AI Modes
+## 🧠 هوش مصنوعی · AI providers
 
-`AI_MODE` را در `.env` تنظیم کنید · Controlled by `AI_MODE`:
+پیمانت **provider-agnostic** است: یک مسیر کد (Vercel AI SDK + `generateObject` با schemaهای Zod) و یک سوییچ محیطی. با `AI_MODE` بین mock و live جابه‌جا می‌شوی و با `AI_PROVIDER` ارائه‌دهنده را انتخاب می‌کنی.
+
+Peymanet is **provider-agnostic**: one code path (Vercel AI SDK `generateObject` + Zod schemas), switched by env. `AI_MODE` picks mock vs. live; `AI_PROVIDER` picks the engine.
 
 | `AI_MODE` | Behavior |
 |-----------|----------|
-| `mock` (default) | Deterministic, contextual, bilingual results from `lib/ai/mock.ts`. No API key, no network. Ideal for demos, tests, offline. |
-| `openai` | Live calls via the Vercel AI SDK. Works with **OpenAI**, **any OpenAI‑compatible endpoint** (reseller/proxy/gateway/OpenRouter/local LLM), or **Azure OpenAI**. |
+| `mock` (default) | Deterministic, contextual, bilingual results from `lib/ai/mock.ts`. No API key, no network — ideal for demos, tests, offline. |
+| `live` | Live calls to the provider chosen by `AI_PROVIDER`. (`openai` is still accepted as a legacy alias for `live`.) |
 
-**🔌 Bring your own endpoint · هر AI که خریده‌ای:**
+**Supported providers** (`AI_PROVIDER`):
+
+| `AI_PROVIDER` | Engine | Required env | Model vars (optional) |
+|---------------|--------|--------------|-----------------------|
+| `openai` (default) | OpenAI | `OPENAI_API_KEY` | `OPENAI_MODEL`, `OPENAI_MODEL_FAST` |
+| `openai-compatible` | Any OpenAI‑compatible endpoint (reseller / proxy / gateway / OpenRouter / local LLM) | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | `OPENAI_MODEL`, `OPENAI_MODEL_FAST`, `OPENAI_HEADERS` |
+| `azure` | Azure OpenAI | `AZURE_API_KEY`, `AZURE_RESOURCE_NAME` | `OPENAI_MODEL` = *deployment* name, `AZURE_API_VERSION` |
+| `google` | Google **Gemini** | `GOOGLE_API_KEY` | `GOOGLE_MODEL`, `GOOGLE_MODEL_FAST` |
+| `anthropic` | Anthropic **Claude** | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL`, `ANTHROPIC_MODEL_FAST` |
+
+**🔌 Examples · نمونه‌ها** — set `AI_MODE=live` plus the block for your provider:
 
 ```env
-# OpenAI (default)
-AI_MODE=openai
+# OpenAI
+AI_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 
-# Any OpenAI-compatible provider (reseller / proxy / gateway / OpenRouter / local server)
-AI_MODE=openai
+# Any OpenAI-compatible endpoint (reseller / proxy / gateway / OpenRouter / local)
+AI_PROVIDER=openai-compatible
 OPENAI_API_KEY=your-key
 OPENAI_BASE_URL=https://your-provider.example/v1
 # OPENAI_HEADERS={"HTTP-Referer":"https://yourapp.com"}   # optional, if the gateway needs it
 
+# Google Gemini
+AI_PROVIDER=google
+GOOGLE_API_KEY=AIza...
+# GOOGLE_MODEL=gemini-1.5-pro   GOOGLE_MODEL_FAST=gemini-2.0-flash   # optional
+
+# Anthropic Claude
+AI_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-...
+
 # Azure OpenAI  (OPENAI_MODEL = your *deployment* name)
-AI_MODE=openai
 AI_PROVIDER=azure
 AZURE_RESOURCE_NAME=my-resource
 AZURE_API_KEY=...
 OPENAI_MODEL=my-gpt4o-deployment
 ```
 
-با تنظیم `OPENAI_BASE_URL` می‌توانی AI خریداری‌شده از هر جای دیگر (هر endpoint سازگار با OpenAI) را استفاده کنی؛ برای Azure هم `AI_PROVIDER=azure` کافی است. همان مسیر کد و همان schemaهای Zod (`lib/ai/schemas.ts`) هر سه را پوشش می‌دهند — سوییچ فقط متغیر محیطی است.
-Set `OPENAI_BASE_URL` to use AI bought from anywhere (any OpenAI‑compatible endpoint); for Azure just set `AI_PROVIDER=azure`. One code path, switched by env.
+هر ارائه‌دهنده از همان مسیر کد و همان schemaهای Zod (`lib/ai/schemas.ts`) عبور می‌کند — سوییچ فقط متغیر محیطی است. مدل‌های پیش‌فرض هوشمند هستند و با متغیرهای بالا قابل override.
+Every provider flows through the same code path and the same Zod schemas (`lib/ai/schemas.ts`) — switching is env-only, with smart defaults you can override.
+
+> 👤 **Per-user keys.** Signed-in users can add their **own** provider key (any of the five above) in **Settings**; it is encrypted at rest (AES‑256‑GCM) and takes precedence over these deployment-level env vars. Resolution order: active per-user key → env → mock. See `lib/ai/resolve.ts`.
+
+---
+
+## 🔐 دسترسی و مدیریت · Access control
+
+احراز هویت واقعی (رمز scrypt، نشست server-side). دسترسی نقش‌محور است:
+
+Real auth (scrypt passwords, server-side sessions) with role-based access:
+
+- **کاربر عادی · Member** — فقط قراردادهای خودش را می‌بیند و ویرایش می‌کند.
+- **مدیر · Admin** — همهٔ قراردادها را می‌بیند، کاربران را تأیید/مدیریت می‌کند و **هزینهٔ هوش مصنوعی هر کاربر** را در `/admin` می‌بیند.
+- **تأیید کاربر · Approval** — ثبت‌نام جدید تأییدنشده است و تا تأیید مدیر به صفحهٔ «در انتظار تأیید» هدایت می‌شود. اولین حساب روی دیتابیس خالی (یا هر ایمیل در `ADMIN_EMAILS`) به‌صورت **مدیرِ تأییدشده** ساخته می‌شود.
+- **هزینه · Per-user cost** — هر فراخوانی AI با `userId` ثبت می‌شود؛ پنل مدیر تعداد فراخوانی، توکن و هزینهٔ برآوردی را به تفکیک کاربر جمع می‌زند.
+
+```env
+APP_SECRET="<openssl rand -hex 32>"     # encrypts per-user API keys at rest
+ADMIN_EMAILS="you@company.com"           # auto-approve these emails as admins
+```
+
+بعد از `npm run db:seed` — ورودهای دمو · Demo logins after `npm run db:seed`:
+
+| نقش · Role | ایمیل · Email | رمز · Password |
+|------|-------|----------|
+| مدیر · Admin | `demo@peymanet.app` | `demo1234` |
+| کاربر · Member | `lawyer@peymanet.app` | `lawyer1234` |
+| در انتظار تأیید · Pending | `reza@peymanet.app` | `reza1234` |
 
 ---
 

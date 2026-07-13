@@ -3,9 +3,9 @@
 
 > سند دوزبانه · Bilingual document (فارسی / English). اصطلاحات فنی، نام فیلدها و کد به انگلیسی هستند.
 
-این سند طراحی کامل سه قابلیت پرچم‌دار یک پلتفرم LegalAI و معماری پیاده‌سازی‌شده‌ی آن را پوشش می‌دهد. کل محصول به‌صورت end-to-end پیاده‌سازی شده و در **حالت mock بدون نیاز به کلید API** قابل اجراست و با تنظیم `AI_MODE=openai` به موتور واقعی OpenAI متصل می‌شود.
+این سند طراحی کامل سه قابلیت پرچم‌دار یک پلتفرم LegalAI و معماری پیاده‌سازی‌شده‌ی آن را پوشش می‌دهد. کل محصول به‌صورت end-to-end پیاده‌سازی شده و در **حالت mock بدون نیاز به کلید API** قابل اجراست و با `AI_MODE=live` به یک موتور واقعی — OpenAI، هر endpoint سازگار با OpenAI، Azure OpenAI، Google Gemini یا Anthropic Claude — متصل می‌شود.
 
-This document covers the complete design of three flagship LegalAI features and their implemented architecture. The product is built end-to-end, runs in **mock mode with no API key**, and switches to live **OpenAI** with `AI_MODE=openai`.
+This document covers the complete design of three flagship LegalAI features and their implemented architecture. The product is built end-to-end, runs in **mock mode with no API key**, and switches to a live engine — OpenAI, any OpenAI‑compatible endpoint, Azure OpenAI, Google Gemini, or Anthropic Claude — with `AI_MODE=live`.
 
 ---
 
@@ -80,14 +80,15 @@ All payloads validated by the shared Zod schemas in `lib/ai/schemas.ts` (one def
 
 ## 6. AI Architecture · معماری هوش مصنوعی
 
-Unified provider layer (`lib/ai/providers.ts`) exposes `segmentContract`, `analyzeClauseRisk`, `summarizeDocument`, `generateNegotiationReport`, `wargameReply` — each switches between **mock** and **OpenAI** behind one interface, with content-hash caching (`lib/ai/cache.ts`) and per-call logging (`AiCall`).
+Unified provider layer (`lib/ai/providers.ts`) exposes `segmentContract`, `analyzeClauseRisk`, `summarizeDocument`, `generateNegotiationReport`, `assistantReply`, `checkPolicyCompliance`, `wargameReply` — each switches between **mock** and a **live provider** behind one interface, with content-hash caching (`lib/ai/cache.ts`) and per-call, per-user logging (`AiCall`).
 
-- **OpenAI path:** Vercel AI SDK `generateObject` with a Zod schema → guaranteed typed JSON; models via `OPENAI_MODEL` (deep) / `OPENAI_MODEL_FAST` (segmentation).
+- **Provider-agnostic live path:** Vercel AI SDK `generateObject` with a Zod schema → guaranteed typed JSON. `lib/ai/resolve.ts` resolves the engine (active per-user key → env → mock) and `lib/ai/client.ts` builds the right SDK client: **OpenAI**, **any OpenAI‑compatible endpoint**, **Azure OpenAI**, **Google Gemini** (`@ai-sdk/google`), or **Anthropic Claude**. Chosen by `AI_PROVIDER`; models via env or per-user overrides, with smart defaults per provider (`defaultModels`).
 - **Mock path:** `lib/ai/mock.ts` — deterministic, *contextual*, bilingual results derived from clause-text keyword detection (fa+en). Makes the whole app demoable with no key and makes tests deterministic.
 - **Pipeline:** ingest → segment → per-clause risk (bounded concurrency, streamed) → doc summary → negotiation (reuses risk output) → war-game chat.
+- **Cost observability:** every call logs task, model, tokens, latency and estimated cost against the triggering `userId`, powering the admin per-user cost view.
 - **Confidence:** model-reported + heuristic; high-severity items can get a second-pass self-consistency check (production).
 
-**فارسی:** همان مسیر کد هم mock و هم OpenAI را پوشش می‌دهد؛ تنها یک متغیر محیطی (`AI_MODE`) بین آن‌ها سوییچ می‌کند و خروجی هر دو با همان schemaهای Zod اعتبارسنجی می‌شود.
+**فارسی:** همان مسیر کد، mock و همهٔ ارائه‌دهنده‌های واقعی (OpenAI / سازگار با OpenAI / Azure / Gemini / Claude) را پوشش می‌دهد؛ `AI_MODE` بین mock و live و `AI_PROVIDER` بین ارائه‌دهنده‌ها سوییچ می‌کند و خروجی همه با همان schemaهای Zod اعتبارسنجی می‌شود.
 
 ---
 
@@ -130,9 +131,9 @@ Shared primitives: `components/shared/{animated-number,score-ring,meter}.tsx`.
 
 ## 11. Enterprise-Level Features · قابلیت‌های سازمانی
 
-Built/foundational: multi-tenant orgs + roles, audit log (= Timeline), AI usage/cost logging, bilingual + RTL, deterministic mock for safe demos/evals, content-hash caching.
+Built/foundational: real auth (scrypt + server-side sessions), **role-based access** (admin sees all, members see their own), **admin user-approval workflow**, **per-user AI cost dashboard**, multi-tenant orgs, audit log (= Timeline), **multi-provider AI** (OpenAI / OpenAI-compatible / Azure / Gemini / Claude) with per-user keys **encrypted at rest** (AES-256-GCM), AI usage/cost logging, bilingual + RTL, deterministic mock for safe demos/evals, content-hash caching.
 
-Designed (clear upgrade paths): SSO/SAML, RBAC enforcement, encryption at rest, e-signature + DocuSign hooks, clause library & templates, bulk analysis, public API + webhooks, PDF/DOCX redline export, approval workflows, comments/@mentions, Drive/SharePoint import, white-label, SOC2-oriented logging, data residency.
+Designed (clear upgrade paths): SSO/SAML, e-signature + DocuSign hooks, clause library & templates, bulk analysis, public API + webhooks, PDF/DOCX redline export, comments/@mentions, Drive/SharePoint import, white-label, SOC2-oriented logging, data residency.
 
 ---
 

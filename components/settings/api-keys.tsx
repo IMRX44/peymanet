@@ -19,13 +19,17 @@ type Cred = {
   createdAt: string;
 };
 
-const PROVIDERS: { value: string; label: string; hint: string }[] = [
-  { value: "openai", label: "OpenAI · GPT", hint: "sk-..." },
-  { value: "anthropic", label: "Anthropic · Claude", hint: "sk-ant-..." },
-  { value: "google", label: "Google · Gemini", hint: "AIza..." },
-  { value: "azure", label: "Azure OpenAI", hint: "کلید Azure" },
-  { value: "openai-compatible", label: "سازگار با OpenAI (پروکسی/گیت‌وی)", hint: "کلید ارائه‌دهنده" },
+const PROVIDERS: { value: string; label: string; hint: string; models: string }[] = [
+  { value: "openai", label: "OpenAI · GPT", hint: "sk-...", models: "gpt-4o · gpt-4o-mini" },
+  { value: "anthropic", label: "Anthropic · Claude", hint: "sk-ant-...", models: "claude-3-5-sonnet-latest" },
+  { value: "google", label: "Google · Gemini", hint: "AIza...", models: "gemini-1.5-pro · gemini-2.0-flash" },
+  { value: "azure", label: "Azure OpenAI", hint: "کلید Azure", models: "نام deployment شما" },
+  { value: "openai-compatible", label: "سازگار با OpenAI (پروکسی/گیت‌وی/OpenRouter)", hint: "کلید ارائه‌دهنده", models: "شناسهٔ مدل ارائه‌دهنده" },
 ];
+
+function modelHint(provider: string): string {
+  return PROVIDERS.find((p) => p.value === provider)?.models ?? "پیش‌فرض هوشمند";
+}
 
 export function ApiKeys({ credentials }: { credentials: Cred[] }) {
   const router = useRouter();
@@ -192,11 +196,11 @@ export function ApiKeys({ credentials }: { credentials: Cred[] }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="space-y-1">
               <span className="text-[11px] text-muted-foreground">مدل اصلی (اختیاری)</span>
-              <Input value={form.model} onChange={(e) => set("model", e.target.value)} dir="ltr" className="text-start" placeholder="پیش‌فرض هوشمند" />
+              <Input value={form.model} onChange={(e) => set("model", e.target.value)} dir="ltr" className="text-start" placeholder={modelHint(form.provider)} />
             </label>
             <label className="space-y-1">
               <span className="text-[11px] text-muted-foreground">مدل سریع (اختیاری)</span>
-              <Input value={form.modelFast} onChange={(e) => set("modelFast", e.target.value)} dir="ltr" className="text-start" placeholder="پیش‌فرض هوشمند" />
+              <Input value={form.modelFast} onChange={(e) => set("modelFast", e.target.value)} dir="ltr" className="text-start" placeholder={modelHint(form.provider)} />
             </label>
           </div>
 

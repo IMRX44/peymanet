@@ -2,9 +2,13 @@
 # Then open http://localhost:3000
 #
 # Default = MOCK AI (no API key needed) on SQLite.
-# To use OpenAI: create a .env next to this file with:
-#     AI_MODE=openai
-#     OPENAI_API_KEY=sk-...
+# To go live, create a .env next to this file and set AI_MODE=live plus the
+# variables for your provider (see README → "AI providers"). Examples:
+#     AI_MODE=live AI_PROVIDER=openai              OPENAI_API_KEY=sk-...
+#     AI_MODE=live AI_PROVIDER=openai-compatible   OPENAI_API_KEY=... OPENAI_BASE_URL=https://gateway/v1
+#     AI_MODE=live AI_PROVIDER=google              GOOGLE_API_KEY=AIza...
+#     AI_MODE=live AI_PROVIDER=anthropic           ANTHROPIC_API_KEY=sk-ant-...
+#     AI_MODE=live AI_PROVIDER=azure               AZURE_API_KEY=... AZURE_RESOURCE_NAME=... OPENAI_MODEL=<deployment>
 # To use PostgreSQL in production: switch the provider in prisma/schema.prisma to
 # "postgresql", point DATABASE_URL at the db service, and uncomment `db` below.
 
@@ -15,17 +19,31 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # Engine selection
       AI_MODE: ${AI_MODE:-mock}
       AI_PROVIDER: ${AI_PROVIDER:-openai}
+      # OpenAI + any OpenAI-compatible endpoint (reseller / proxy / gateway / OpenRouter / local)
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o}
       OPENAI_MODEL_FAST: ${OPENAI_MODEL_FAST:-gpt-4o-mini}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_HEADERS: ${OPENAI_HEADERS:-}
+      # Google Gemini
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_MODEL: ${GOOGLE_MODEL:-}
+      GOOGLE_MODEL_FAST: ${GOOGLE_MODEL_FAST:-}
+      # Anthropic Claude
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      ANTHROPIC_MODEL_FAST: ${ANTHROPIC_MODEL_FAST:-}
+      # Azure OpenAI
       AZURE_RESOURCE_NAME: ${AZURE_RESOURCE_NAME:-}
       AZURE_API_KEY: ${AZURE_API_KEY:-}
       AZURE_API_VERSION: ${AZURE_API_VERSION:-}
       AZURE_BASE_URL: ${AZURE_BASE_URL:-}
+      # App
+      APP_SECRET: ${APP_SECRET:-}
+      ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-fa}
     restart: unless-stopped
 
