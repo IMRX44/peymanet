@@ -19,6 +19,12 @@ services:
     ports:
       - "3000:3000"
     environment:
+      # Database — defaults to a SQLite file persisted on the `peymanet-data`
+      # volume below (survives `up --build`). For Postgres: uncomment the `db`
+      # service + the `depends_on` block, switch the Prisma datasource provider
+      # to "postgresql" in prisma/schema.prisma, and set DATABASE_URL, e.g.:
+      #   DATABASE_URL=postgresql://peymanet:peymanet@db:5432/peymanet?schema=public
+      DATABASE_URL: ${DATABASE_URL:-file:/app/data/dev.db}
       # Engine selection
       AI_MODE: ${AI_MODE:-mock}
       AI_PROVIDER: ${AI_PROVIDER:-openai}
@@ -45,9 +51,20 @@ services:
       APP_SECRET: ${APP_SECRET:-}
       ADMIN_EMAILS: ${ADMIN_EMAILS:-}
       DEFAULT_LOCALE: ${DEFAULT_LOCALE:-fa}
+    volumes:
+      # Persists the SQLite database across container rebuilds. (Harmless when
+      # using Postgres — the app just won't write anything here.)
+      - peymanet-data:/app/data
+    # For Postgres, uncomment this so the app waits for the db to be ready:
+    # depends_on:
+    #   db:
+    #     condition: service_healthy
     restart: unless-stopped
 
   # ── PostgreSQL (optional, for production) ──
+  # To use: uncomment this service, uncomment `depends_on` above, set the app's
+  # DATABASE_URL to the postgres:// URL, switch the Prisma provider to
+  # "postgresql", then `docker compose up --build`.
   # db:
   #   image: postgres:16-alpine
   #   environment:
@@ -56,5 +73,12 @@ services:
   #     POSTGRES_PASSWORD: peymanet
   #   ports: ["5432:5432"]
   #   volumes: ["pgdata:/var/lib/postgresql/data"]
-# volumes:
-#   pgdata:
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U peymanet"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 10
+
+volumes:
+  peymanet-data:
+  # pgdata:

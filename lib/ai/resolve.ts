@@ -180,7 +180,10 @@ export async function resolveAi(): Promise<ResolvedAi> {
         orderBy: { createdAt: "desc" },
       });
       if (cred) {
-        const provider = cred.provider as AiProvider;
+        // A base URL always means a custom OpenAI-compatible endpoint, even if
+        // the user picked plain "openai" — this drives the compatibility path.
+        const provider: AiProvider =
+          cred.provider === "openai" && cred.baseUrl ? "openai-compatible" : (cred.provider as AiProvider);
         const def = defaultModels(provider);
         const apiKey = decryptSecret(cred.apiKeyEnc);
         if (apiKey) {

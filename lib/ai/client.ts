@@ -43,12 +43,20 @@ export async function getLanguageModel(ai: ResolvedAi, modelId: string): Promise
     case "openai-compatible":
     default: {
       const { createOpenAI } = await import("@ai-sdk/openai");
+      // Any third-party OpenAI-compatible endpoint (reseller / proxy / gateway /
+      // OpenRouter / local server) → "compatible" mode so we don't send
+      // OpenAI-only params the endpoint may reject.
+      const compatible = ai.provider === "openai-compatible" || !!ai.baseUrl;
       const openai = createOpenAI({
         apiKey: ai.apiKey,
         ...(ai.baseUrl ? { baseURL: ai.baseUrl } : {}),
         ...(process.env.OPENAI_HEADERS ? { headers: safeJson(process.env.OPENAI_HEADERS) } : {}),
+        compatibility: compatible ? "compatible" : "strict",
       });
-      return openai(modelId);
+      // Don't force structured outputs (json_schema) on compatible endpoints;
+      // most open models / gateways don't implement it. providers.ts uses
+      // JSON mode + a repair pass for these instead.
+      return compatible ? openai(modelId, { structuredOutputs: false }) : openai(modelId);
     }
   }
 }

@@ -28,8 +28,18 @@ import { CONTRACT_TYPES } from "@/lib/ai/schemas";
 import { PERSPECTIVE_PAIRS } from "@/lib/constants";
 
 function actionError(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return "unexpected server error";
+  const msg = err instanceof Error ? err.message : "unexpected server error";
+  // Map common live-provider failures to actionable Persian guidance.
+  if (/no object generated|did not match schema|failed to parse|invalid json/i.test(msg)) {
+    return "مدل انتخابی نتوانست پاسخ ساختارمند (JSON) تولید کند. معمولاً یعنی آن endpoint/مدل خروجی ساختاریافته را کامل پشتیبانی نمی‌کند — یک مدل توانمندتر انتخاب کنید یا دوباره تلاش کنید.";
+  }
+  if (/401|unauthorized|invalid api key|invalid_api_key|forbidden|403/i.test(msg)) {
+    return "کلید API یا آدرس endpoint پذیرفته نشد. کلید، Base URL و نام مدل را در تنظیمات بررسی کنید.";
+  }
+  if (/404|not found|model_not_found|does not exist/i.test(msg)) {
+    return "مدل یا endpoint یافت نشد. نام مدل و Base URL را بررسی کنید.";
+  }
+  return msg;
 }
 
 function revalidateContract(id: string) {

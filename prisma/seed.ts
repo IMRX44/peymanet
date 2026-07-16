@@ -78,6 +78,17 @@ function buildContent(clauses: typeof CLAUSES) {
 async function main() {
   console.log("🌱 Seeding Peymanet…");
 
+  // Idempotent boot (Docker): when SEED_ONLY_IF_EMPTY=1, skip if the database
+  // already has data — so restarts on a persistent volume never wipe user data.
+  // Local `npm run db:seed` / `db:reset` don't set this flag and always reseed.
+  if (process.env.SEED_ONLY_IF_EMPTY === "1") {
+    const existingUsers = await prisma.user.count().catch(() => 0);
+    if (existingUsers > 0) {
+      console.log(`↩︎  Database already has ${existingUsers} user(s) — skipping seed.`);
+      return;
+    }
+  }
+
   // Clean slate (respect FK order).
   await prisma.aiCall.deleteMany();
   await prisma.aiCache.deleteMany();

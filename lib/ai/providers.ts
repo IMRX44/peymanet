@@ -61,6 +61,22 @@ function estimateTokens(text: string): number {
 }
 
 /**
+ * Salvage a JSON object from a model reply that wrapped it in markdown fences
+ * or surrounding prose. Many OpenAI-compatible endpoints / open models do this,
+ * which otherwise triggers "No object generated: response did not match schema".
+ * Returns the extracted JSON string, or null to let the SDK report the error.
+ */
+async function repairToJson({ text }: { text: string }): Promise<string | null> {
+  let t = text.trim();
+  const fenced = t.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced) t = fenced[1].trim();
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  if (start >= 0 && end > start) return t.slice(start, end + 1);
+  return null;
+}
+
+/**
  * Core helper: run a structured-output task with caching + logging, switching
  * between deterministic mock and live OpenAI based on AI_MODE.
  */
@@ -101,10 +117,16 @@ async function runObject<T>(opts: {
     // Lazy import so the AI SDK is only loaded in live mode.
     const { getLanguageModel } = await import("@/lib/ai/client");
     const { generateObject } = await import("ai");
+    // Third-party OpenAI-compatible endpoints (reseller / proxy / gateway / local)
+    // frequently don't support OpenAI structured outputs (response_format
+    // json_schema). Fall back to plain JSON mode + a repair pass so they work.
+    const compatible = ai.provider === "openai-compatible" || (ai.provider === "openai" && !!ai.baseUrl);
     try {
       const result = await generateObject({
         model: await getLanguageModel(ai, model),
         schema: opts.schema as z.ZodType<T>,
+        ...(compatible ? { mode: "json" as const } : {}),
+        experimental_repairText: repairToJson,
         system: opts.system,
         prompt: opts.prompt,
       });

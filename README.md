@@ -120,6 +120,8 @@ Every provider flows through the same code path and the same Zod schemas (`lib/a
 
 > 👤 **Per-user keys.** Signed-in users can add their **own** provider key (any of the five above) in **Settings**; it is encrypted at rest (AES‑256‑GCM) and takes precedence over these deployment-level env vars. Resolution order: active per-user key → env → mock. See `lib/ai/resolve.ts`.
 
+> 🧩 **Compatible endpoints (Arvan / OpenRouter / local / …).** For `openai-compatible` (or any `openai` key with a `Base URL`), Peymanet automatically uses OpenAI‑**compatible** mode + plain **JSON** object generation + a JSON‑repair pass — because most gateways/open models don't support OpenAI *structured outputs* (`response_format: json_schema`). If you still see `response did not match schema`, the chosen model isn't reliably producing structured JSON — pick a more capable model.
+
 ---
 
 ## 🔐 دسترسی و مدیریت · Access control
