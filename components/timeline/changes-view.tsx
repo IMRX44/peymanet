@@ -106,9 +106,17 @@ export function ChangesView() {
 
   const restore = (versionId: string) =>
     start(async () => {
-      await restoreVersionAction(data.contract.id, versionId);
-      toast.success("نسخه بازگردانی شد");
-      router.refresh();
+      try {
+        const res = await restoreVersionAction(data.contract.id, versionId);
+        if (!res.ok) {
+          toast.error(res.error ?? "بازگردانی نسخه ناموفق بود");
+          return;
+        }
+        toast.success("نسخه بازگردانی شد");
+        router.refresh();
+      } catch {
+        toast.error("بازگردانی نسخه ناموفق بود");
+      }
     });
 
   return (

@@ -46,6 +46,23 @@ function revalidateContract(id: string) {
   revalidatePath(`/contracts/${id}`);
 }
 
+/**
+ * Authorization gate for every contract-scoped mutation. Server actions are
+ * publicly callable POST endpoints, so each one must independently verify:
+ * signed-in → approved by an admin → admin or owner of the target contract.
+ */
+async function authorizeContract(contractId: string) {
+  const user = await getCurrentUser();
+  if (!user) return { ok: false as const, error: "ابتدا وارد حساب کاربری شوید." };
+  if (!isApproved(user)) return { ok: false as const, error: "حساب شما هنوز توسط مدیر تأیید نشده است." };
+  const contract = await prisma.contract.findUnique({ where: { id: contractId } });
+  if (!contract) return { ok: false as const, error: "قرارداد یافت نشد." };
+  if (!isAdmin(user) && contract.ownerId && contract.ownerId !== user.id) {
+    return { ok: false as const, error: "شما به این قرارداد دسترسی ندارید." };
+  }
+  return { ok: true as const, user, contract };
+}
+
 /** Recompute and persist a run's overall risk after a clause score change. */
 async function refreshRunOverall(runId: string) {
   const all = await prisma.riskAssessment.findMany({ where: { runId } });
@@ -67,8 +84,11 @@ async function refreshRunOverall(runId: string) {
  * the fix is a what-if applied to the risk view, not a change to the contract.
  */
 export async function applyFixAction(clauseId: string) {
+  try {
   const clause = await prisma.clause.findUnique({ where: { id: clauseId }, include: { version: true } });
   if (!clause) return { ok: false as const, error: "clause not found" };
+  const authz = await authorizeContract(clause.version.contractId);
+  if (!authz.ok) return authz;
 
   const assessment = await prisma.riskAssessment.findFirst({
     where: { clauseId },
@@ -96,45 +116,80 @@ export async function applyFixAction(clauseId: string) {
 
   revalidateContract(clause.version.contractId);
   return { ok: true as const };
+  } catch (err) {
+    console.error("[applyFixAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 export async function restoreVersionAction(contractId: string, versionId: string) {
-  const user = await getCurrentUser();
-  await restoreVersion({ contractId, targetVersionId: versionId, authorId: user?.id });
-  revalidateContract(contractId);
-  return { ok: true as const };
+  try {
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return authz;
+    await restoreVersion({ contractId, targetVersionId: versionId, authorId: authz.user.id });
+    revalidateContract(contractId);
+    return { ok: true as const };
+  } catch (err) {
+    console.error("[restoreVersionAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 export async function createBranchAction(contractId: string, name: string) {
-  const user = await getCurrentUser();
-  const contract = await prisma.contract.findUnique({ where: { id: contractId } });
-  if (!contract?.headVersionId) return { ok: false as const, error: "no head version" };
-  await createBranch({ contractId, name, baseVersionId: contract.headVersionId, createdById: user?.id });
-  revalidateContract(contractId);
-  return { ok: true as const };
+  try {
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return authz;
+    if (!authz.contract.headVersionId) return { ok: false as const, error: "no head version" };
+    await createBranch({ contractId, name, baseVersionId: authz.contract.headVersionId, createdById: authz.user.id });
+    revalidateContract(contractId);
+    return { ok: true as const };
+  } catch (err) {
+    console.error("[createBranchAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 export async function mergeBranchAction(contractId: string, branchId: string) {
-  const user = await getCurrentUser();
-  const result = await mergeBranch({ contractId, branchId, authorId: user?.id });
-  revalidateContract(contractId);
-  return { ok: true as const, merged: result.merged, conflicts: result.conflicts, branchName: result.branchName };
+  try {
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return authz;
+    const result = await mergeBranch({ contractId, branchId, authorId: authz.user.id });
+    revalidateContract(contractId);
+    return { ok: true as const, merged: result.merged, conflicts: result.conflicts, branchName: result.branchName };
+  } catch (err) {
+    console.error("[mergeBranchAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 export async function toggleChecklistAction(itemId: string, done: boolean, contractId: string) {
-  await prisma.checklistItem.update({ where: { id: itemId }, data: { done } });
-  revalidateContract(contractId);
-  return { ok: true as const };
+  try {
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return authz;
+    // Scope the update to this contract so a stray/forged itemId is a no-op.
+    await prisma.checklistItem.updateMany({
+      where: { id: itemId, report: { contractId } },
+      data: { done },
+    });
+    revalidateContract(contractId);
+    return { ok: true as const };
+  } catch (err) {
+    console.error("[toggleChecklistAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 /** Accept a negotiation suggestion: lower the linked clause risk + log the event. */
 export async function acceptNegotiationItemAction(itemId: string) {
-  const user = await getCurrentUser();
+  try {
   const item = await prisma.negotiationItem.findUnique({
     where: { id: itemId },
     include: { report: true },
   });
   if (!item) return { ok: false as const, error: "item not found" };
+  const authz = await authorizeContract(item.report.contractId);
+  if (!authz.ok) return authz;
+  const user = authz.user;
 
   await prisma.negotiationItem.update({ where: { id: itemId }, data: { accepted: true } });
 
@@ -158,7 +213,7 @@ export async function acceptNegotiationItemAction(itemId: string) {
     contractId: item.report.contractId,
     type: "negotiation_accepted",
     source: "human",
-    actorId: user?.id,
+    actorId: user.id,
     summary: `پذیرش پیشنهاد مذاکره${itemTitle.fa ? `: ${itemTitle.fa}` : ""}`,
     why: "اعمال نتیجه‌ی مذاکره و کاهش ریسک بند مربوطه.",
     metadata: { itemId, projectedRisk: item.projectedRisk },
@@ -166,12 +221,18 @@ export async function acceptNegotiationItemAction(itemId: string) {
 
   revalidateContract(item.report.contractId);
   return { ok: true as const };
+  } catch (err) {
+    console.error("[acceptNegotiationItemAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 export async function generateNegotiationAction(contractId: string, perspective: Perspective) {
   try {
-    const contract = await prisma.contract.findUnique({ where: { id: contractId } });
-    if (!contract?.headVersionId) return { ok: false as const, error: "no head version" };
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return authz;
+    const contract = authz.contract;
+    if (!contract.headVersionId) return { ok: false as const, error: "no head version" };
 
     const clauses = await prisma.clause.findMany({
       where: { versionId: contract.headVersionId },
@@ -267,11 +328,12 @@ export async function wargameAction(args: {
   history: { role: "user" | "assistant"; content: string }[];
 }) {
   try {
-    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const authz = await authorizeContract(args.contractId);
+    if (!authz.ok) return authz;
     const reply = await wargameReply({
       history: args.history,
       perspective: args.perspective,
-      contractType: (contract?.type as ContractType) ?? "other",
+      contractType: (authz.contract.type as ContractType) ?? "other",
     });
     return { ok: true as const, reply };
   } catch (err) {
@@ -303,13 +365,19 @@ async function segmentVersionClauses(versionId: string, contentText: string) {
 
 /** Autosave: persist the working draft to the head version in place (no new version). */
 export async function autosaveDocumentAction(contractId: string, content: string) {
-  const contract = await prisma.contract.findUnique({ where: { id: contractId } });
-  if (!contract?.headVersionId) return { ok: false as const };
-  await prisma.contractVersion.update({
-    where: { id: contract.headVersionId },
-    data: { contentText: content, contentJson: buildContentJson(content) },
-  });
-  return { ok: true as const, savedAt: new Date().toISOString() };
+  try {
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return { ok: false as const, error: authz.error };
+    if (!authz.contract.headVersionId) return { ok: false as const, error: "no head version" };
+    await prisma.contractVersion.update({
+      where: { id: authz.contract.headVersionId },
+      data: { contentText: content, contentJson: buildContentJson(content) },
+    });
+    return { ok: true as const, savedAt: new Date().toISOString() };
+  } catch (err) {
+    console.error("[autosaveDocumentAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 /** Commit a new immutable version from the editor (manual save or accepted AI edit). */
@@ -322,19 +390,19 @@ export async function commitDocumentAction(args: {
   why?: string;
 }) {
   try {
-    const user = await getCurrentUser();
-    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
-    if (!contract?.headVersionId) return { ok: false as const, error: "no head version" };
+    const authz = await authorizeContract(args.contractId);
+    if (!authz.ok) return authz;
+    if (!authz.contract.headVersionId) return { ok: false as const, error: "no head version" };
     const version = await commitEdit({
       contractId: args.contractId,
-      parentVersionId: contract.headVersionId,
+      parentVersionId: authz.contract.headVersionId,
       newContentJson: buildContentJson(args.content),
       newContentText: args.content,
       eventType: args.eventType,
       source: args.source,
       summary: args.summary,
       why: args.why ?? null,
-      authorId: user?.id,
+      authorId: authz.user.id,
     });
     await segmentVersionClauses(version.id, args.content);
     revalidateContract(args.contractId);
@@ -353,15 +421,17 @@ export async function assistantAction(args: {
   history?: { role: "user" | "assistant"; content: string }[];
 }) {
   try {
-    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const authz = await authorizeContract(args.contractId);
+    if (!authz.ok) return authz;
+    const contract = authz.contract;
     const history = (args.history ?? []).slice(-6);
     const response = await assistantReply({
       document: args.document,
       message: args.message,
       history,
-      contractType: (contract?.type as ContractType) ?? "other",
-      jurisdiction: contract?.jurisdiction ?? null,
-      language: contract?.language ?? "fa",
+      contractType: (contract.type as ContractType) ?? "other",
+      jurisdiction: contract.jurisdiction ?? null,
+      language: contract.language ?? "fa",
       contractId: args.contractId,
     });
 
@@ -381,12 +451,13 @@ export async function assistantAction(args: {
 export async function checkPolicyComplianceAction(args: { contractId: string; document: string; policies: string }) {
   try {
     if (!args.policies.trim()) return { ok: false as const, error: "no policies provided" };
-    const contract = await prisma.contract.findUnique({ where: { id: args.contractId } });
+    const authz = await authorizeContract(args.contractId);
+    if (!authz.ok) return authz;
     const result = await checkPolicyCompliance({
       document: args.document,
       policies: args.policies,
-      contractType: (contract?.type as ContractType) ?? "other",
-      jurisdiction: contract?.jurisdiction ?? null,
+      contractType: (authz.contract.type as ContractType) ?? "other",
+      jurisdiction: authz.contract.jurisdiction ?? null,
       contractId: args.contractId,
     });
     return { ok: true as const, result };
@@ -413,10 +484,13 @@ export async function createContractAction(args: { title: string; type: string; 
     const type = (CONTRACT_TYPES as readonly string[]).includes(args.type) ? args.type : "other";
     const content = (args.content ?? "").trim() || STARTER_DOC;
 
-    // Attach to the user's own org (create one if the user has none).
-    const org =
-      (user.orgId ? await prisma.organization.findUnique({ where: { id: user.orgId } }) : null) ??
-      (await prisma.organization.create({ data: { name: "فضای کاری من", slug: `org-${Date.now()}` } }));
+    // Attach to the user's own org (create + link one if the user has none,
+    // so subsequent contracts reuse it instead of minting a new org each time).
+    let org = user.orgId ? await prisma.organization.findUnique({ where: { id: user.orgId } }) : null;
+    if (!org) {
+      org = await prisma.organization.create({ data: { name: "فضای کاری من", slug: `org-${Date.now()}` } });
+      await prisma.user.update({ where: { id: user.id }, data: { orgId: org.id } });
+    }
 
     const contract = await prisma.contract.create({
       data: { orgId: org.id, ownerId: user.id, title, type, jurisdiction: "Iran", language: "fa", status: "draft" },
@@ -450,9 +524,11 @@ export async function createContractAction(args: { title: string; type: string; 
   }
 }
 
-/** Delete a contract and all of its related records. */
+/** Delete a contract and all of its related records (owner or admin only). */
 export async function deleteContractAction(contractId: string) {
   try {
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return authz;
     // Break the Contract.headVersion self-relation before cascade delete.
     await prisma.contract.update({ where: { id: contractId }, data: { headVersionId: null } });
     await prisma.contract.delete({ where: { id: contractId } });
@@ -466,17 +542,23 @@ export async function deleteContractAction(contractId: string) {
 
 /** Audit: record that the user rejected an AI suggestion. */
 export async function logRejectionAction(contractId: string, summary: string) {
-  const user = await getCurrentUser();
-  await recordEvent({
-    contractId,
-    type: "ai_suggestion_rejected",
-    source: "human",
-    actorId: user?.id,
-    summary,
-    why: "کاربر پیشنهاد هوش مصنوعی را رد کرد.",
-  });
-  revalidateContract(contractId);
-  return { ok: true as const };
+  try {
+    const authz = await authorizeContract(contractId);
+    if (!authz.ok) return authz;
+    await recordEvent({
+      contractId,
+      type: "ai_suggestion_rejected",
+      source: "human",
+      actorId: authz.user.id,
+      summary,
+      why: "کاربر پیشنهاد هوش مصنوعی را رد کرد.",
+    });
+    revalidateContract(contractId);
+    return { ok: true as const };
+  } catch (err) {
+    console.error("[logRejectionAction]", err);
+    return { ok: false as const, error: actionError(err) };
+  }
 }
 
 // ───────────────────────────── Auth ──────────────────────────────────────────

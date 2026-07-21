@@ -62,9 +62,15 @@ export function EditorWorkspace({
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(async () => {
       setSaving(true);
-      await autosaveDocumentAction(contractId, content);
-      setSavedContent(content);
-      setSaving(false);
+      try {
+        const res = await autosaveDocumentAction(contractId, content);
+        // Only mark clean on success — otherwise the "unsaved" badge stays on.
+        if (res.ok) setSavedContent(content);
+      } catch {
+        /* stay dirty; the badge signals the unsaved state */
+      } finally {
+        setSaving(false);
+      }
     }, 2000);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -73,18 +79,27 @@ export function EditorWorkspace({
 
   const saveVersion = useCallback(async () => {
     setSaving(true);
-    await commitDocumentAction({
-      contractId,
-      content,
-      source: "human",
-      eventType: "user_edited",
-      summary: "ذخیره‌ی نسخه‌ی جدید سند",
-    });
-    setSavedContent(content);
-    setBaseline(content);
-    setAiLines(new Set());
-    setSaving(false);
-    toast.success("نسخه ذخیره شد");
+    try {
+      const res = await commitDocumentAction({
+        contractId,
+        content,
+        source: "human",
+        eventType: "user_edited",
+        summary: "ذخیره‌ی نسخه‌ی جدید سند",
+      });
+      if (!res.ok) {
+        toast.error(res.error ?? "ذخیره‌ی نسخه ناموفق بود");
+        return;
+      }
+      setSavedContent(content);
+      setBaseline(content);
+      setAiLines(new Set());
+      toast.success("نسخه ذخیره شد");
+    } catch {
+      toast.error("ذخیره‌ی نسخه ناموفق بود");
+    } finally {
+      setSaving(false);
+    }
   }, [content, contractId]);
 
   const applyEdit = useCallback(
@@ -93,13 +108,18 @@ export function EditorWorkspace({
         toast.error("متن هدف در سند پیدا نشد");
         return;
       }
-      const next = content.replace(find, replacement);
+      // Function replacer: a literal replacement, immune to `$`-pattern expansion.
+      const next = content.replace(find, () => replacement);
       setContent(next);
       setAiLines(lineRange(next, replacement));
       setSavedContent(next);
       setBaseline(next);
       void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_rewrote_section", summary }).then((res) => {
-        if (!res.ok) toast.error(res.error ?? "ذخیره‌ی ویرایش هوش مصنوعی ناموفق بود");
+        if (!res.ok) {
+          toast.error(res.error ?? "ذخیره‌ی ویرایش هوش مصنوعی ناموفق بود");
+          // Mark the doc dirty again so autosave persists the change in place.
+          setSavedContent(content);
+        }
       });
       toast.success("ویرایش هوش مصنوعی اعمال شد");
     },
@@ -114,7 +134,10 @@ export function EditorWorkspace({
       setSavedContent(next);
       setBaseline(next);
       void commitDocumentAction({ contractId, content: next, source: "ai", eventType: "ai_added_clause", summary }).then((res) => {
-        if (!res.ok) toast.error(res.error ?? "ذخیره‌ی بند جدید ناموفق بود");
+        if (!res.ok) {
+          toast.error(res.error ?? "ذخیره‌ی بند جدید ناموفق بود");
+          setSavedContent(content);
+        }
       });
       toast.success("بند جدید درج شد");
     },

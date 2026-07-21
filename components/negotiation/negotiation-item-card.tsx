@@ -42,9 +42,17 @@ export function NegotiationItemCard({
 
   const accept = () =>
     start(async () => {
-      await acceptNegotiationItemAction(item.id);
-      toast.success(locale === "en" ? "Accepted — applied to contract" : "پذیرفته شد — روی قرارداد اعمال شد");
-      router.refresh();
+      try {
+        const res = await acceptNegotiationItemAction(item.id);
+        if (!res.ok) {
+          toast.error(res.error ?? (locale === "en" ? "Could not accept" : "پذیرش پیشنهاد ناموفق بود"));
+          return;
+        }
+        toast.success(locale === "en" ? "Accepted — applied to contract" : "پذیرفته شد — روی قرارداد اعمال شد");
+        router.refresh();
+      } catch {
+        toast.error(locale === "en" ? "Could not accept" : "پذیرش پیشنهاد ناموفق بود");
+      }
     });
 
   return (
