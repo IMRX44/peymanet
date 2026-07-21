@@ -68,10 +68,22 @@ export function WorkspaceProvider({
     setProgress({ current: 0, total: data.clauses.length });
     let finished = false;
     const es = new EventSource(`/api/contracts/${data.contract.id}/analyze`);
+    const fail = (msg?: string) => {
+      if (finished) return;
+      finished = true;
+      es.close();
+      setAnalyzing(false);
+      setProgress(null);
+      toast.error(msg || (data.locale === "en" ? "Risk scan failed" : "اسکن ریسک ناموفق بود"));
+    };
     es.addEventListener("clause", (e) => {
-      const d = JSON.parse((e as MessageEvent).data);
-      setLiveScores((prev) => ({ ...prev, [d.clauseId]: { score: d.score, severity: d.severity } }));
-      setProgress({ current: d.current, total: d.total });
+      try {
+        const d = JSON.parse((e as MessageEvent).data);
+        setLiveScores((prev) => ({ ...prev, [d.clauseId]: { score: d.score, severity: d.severity } }));
+        setProgress({ current: d.current, total: d.total });
+      } catch {
+        /* ignore a malformed frame */
+      }
     });
     es.addEventListener("done", () => {
       finished = true;
@@ -81,13 +93,20 @@ export function WorkspaceProvider({
       toast.success(data.locale === "en" ? "Risk scan complete" : "اسکن ریسک کامل شد");
       router.refresh();
     });
+    // Server-side failure (e.g. a live provider error) — reported as a `fail` event.
+    es.addEventListener("fail", (e) => {
+      let msg: string | undefined;
+      try {
+        msg = JSON.parse((e as MessageEvent).data)?.message;
+      } catch {
+        /* use the default message */
+      }
+      fail(data.locale === "en" ? "Risk scan failed" : `اسکن ریسک ناموفق بود${msg ? ` — ${msg}` : ""}`);
+    });
     es.onerror = () => {
-      // EventSource fires `error` on normal close — ignore that path.
+      // EventSource also fires this on normal close; ignore once finished.
       if (finished || es.readyState === EventSource.CLOSED) return;
-      es.close();
-      setAnalyzing(false);
-      setProgress(null);
-      toast.error(data.locale === "en" ? "Risk scan failed" : "اسکن ریسک ناموفق بود");
+      fail();
     };
   }, [analyzing, data.clauses.length, data.contract.id, data.locale, router]);
 

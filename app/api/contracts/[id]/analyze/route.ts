@@ -129,7 +129,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
             })
             .catch(() => {});
         }
-        send("error", { message: err instanceof Error ? err.message : "analysis failed" });
+        // Use "fail" (not "error") — a server-sent event named "error" collides
+        // with EventSource's built-in error semantics on the client.
+        send("fail", { message: err instanceof Error ? err.message : "analysis failed" });
         controller.close();
       }
     },

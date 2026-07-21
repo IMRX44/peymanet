@@ -7,11 +7,11 @@ import { getCurrentUser, signIn, signUp, signOut, isAdmin, isApproved } from "@/
 import { encryptSecret } from "@/lib/crypto";
 import { recordEvent } from "@/lib/events/events";
 import { restoreVersion, commitEdit } from "@/lib/events/versions";
+import { segmentVersionClauses } from "@/lib/events/segment";
 import { createBranch, mergeBranch } from "@/lib/events/branches";
 import { scoreToSeverity } from "@/lib/risk/colors";
 import { aggregateOverall } from "@/lib/risk/aggregate";
 import { generateNegotiationReport, wargameReply, assistantReply, checkPolicyCompliance } from "@/lib/ai/providers";
-import { mockSegmentation } from "@/lib/ai/mock";
 import { MODELS, estimateCost } from "@/lib/ai/models";
 import { createVersion } from "@/lib/events/versions";
 import { fromJson } from "@/lib/db/json";
@@ -348,21 +348,6 @@ function buildContentJson(content: string): string {
   return JSON.stringify({ markdown: content });
 }
 
-/** Re-segment a version's text into Clause rows (keeps the analysis view consistent). */
-async function segmentVersionClauses(versionId: string, contentText: string) {
-  const seg = mockSegmentation(contentText);
-  let cursor = 0;
-  for (const c of seg.clauses) {
-    const idx = contentText.indexOf(c.text, cursor);
-    const start = idx >= 0 ? idx : cursor;
-    const end = start + c.text.length;
-    cursor = end;
-    await prisma.clause.create({
-      data: { versionId, index: c.index, title: c.title ?? null, type: c.type ?? null, text: c.text, startOffset: start, endOffset: end },
-    });
-  }
-}
-
 /** Autosave: persist the working draft to the head version in place (no new version). */
 export async function autosaveDocumentAction(contractId: string, content: string) {
   try {
@@ -404,7 +389,7 @@ export async function commitDocumentAction(args: {
       why: args.why ?? null,
       authorId: authz.user.id,
     });
-    await segmentVersionClauses(version.id, args.content);
+    // commitEdit already re-segments the version's clauses.
     revalidateContract(args.contractId);
     return { ok: true as const, versionId: version.id };
   } catch (err) {

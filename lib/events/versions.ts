@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { contentHash } from "@/lib/utils";
 import { recordEvent } from "@/lib/events/events";
+import { segmentVersionClauses } from "@/lib/events/segment";
 import { wordDiff } from "@/lib/diff/textDiff";
 import type { AiSource, EventType } from "@/lib/ai/schemas";
 
@@ -86,6 +87,10 @@ export async function commitEdit(input: {
     source: input.source,
     message: input.summary,
   });
+
+  // Every committed version (edit / restore / merge) gets fresh clause rows so
+  // the risk view and the SSE scan always have something to analyze.
+  await segmentVersionClauses(version.id, input.newContentText);
 
   await recordEvent({
     contractId: input.contractId,
